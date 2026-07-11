@@ -1,9 +1,9 @@
-# PaperFleet
+# Fleetex
 
 **Your own private, self-hosted LaTeX editor — a pip-installable launcher built on [Overleaf Community Edition](https://github.com/overleaf/overleaf).**
 
-PaperFleet runs Overleaf on a server *you* control. Install and upgrade it with
-`pip install paperfleet`, and keep your customizations in a GitHub fork you can
+Fleetex runs Overleaf on a server *you* control. Install and upgrade it with
+`pip install fleetex`, and keep your customizations in a GitHub fork you can
 pull from. Your users only need a web browser.
 
 > This package is a thin, **zero-dependency** Python wrapper around Docker
@@ -19,7 +19,7 @@ pull from. Your users only need a web browser.
 You want an Overleaf alternative for work that:
 
 - runs on **your own server**, fully under your control,
-- installs and updates with a single command (`pip install -U paperfleet`),
+- installs and updates with a single command (`pip install -U fleetex`),
 - and lets you keep improvements in a **GitHub fork** you can `git pull`.
 
 That's exactly what this is.
@@ -33,21 +33,21 @@ That's exactly what this is.
 ## Install
 
 ```bash
-pip install paperfleet        # from PyPI (once published)
+pip install fleetex        # from PyPI (once published)
 ```
 
 or from your GitHub fork (the "GitHub pull" workflow, see below):
 
 ```bash
-pip install "git+https://github.com/<you>/paperfleet.git"
+pip install "git+https://github.com/<you>/fleetex.git"
 ```
 
 ## Quick start
 
 ```bash
-paperfleet up                     # pull images + start the stack (detached)
-paperfleet create-admin you@work.example.com
-paperfleet open                   # open http://localhost:8080
+fleetex up                     # pull images + start the stack (detached)
+fleetex create-admin you@work.example.com
+fleetex open                   # open http://localhost:8080
 ```
 
 Then log in as the admin you created. That's it — you have a working,
@@ -57,29 +57,29 @@ self-hosted Overleaf.
 
 | Command | What it does |
 |---|---|
-| `paperfleet up` | Pull images and start Overleaf (add `--foreground` to stream logs, `--no-pull` to skip pulling) |
-| `paperfleet down` | Stop the stack (data is preserved). `--volumes` also wipes data |
-| `paperfleet status` | Show container status |
-| `paperfleet logs -f [service]` | Tail logs (optionally for one service) |
-| `paperfleet restart` | Restart all services |
-| `paperfleet open` | Open the web UI in a browser |
-| `paperfleet create-admin <email>` | Create the first admin user |
-| `paperfleet exec <service> <cmd...>` | Run a command in a container (e.g. `exec sharelatex bash`) |
-| `paperfleet config [--port N ...]` | View or change settings and re-render the compose file |
-| `paperfleet version` | Show launcher + Docker versions |
+| `fleetex up` | Pull images and start Overleaf (add `--foreground` to stream logs, `--no-pull` to skip pulling) |
+| `fleetex down` | Stop the stack (data is preserved). `--volumes` also wipes data |
+| `fleetex status` | Show container status |
+| `fleetex logs -f [service]` | Tail logs (optionally for one service) |
+| `fleetex restart` | Restart all services |
+| `fleetex open` | Open the web UI in a browser |
+| `fleetex create-admin <email>` | Create the first admin user |
+| `fleetex exec <service> <cmd...>` | Run a command in a container (e.g. `exec sharelatex bash`) |
+| `fleetex config [--port N ...]` | View or change settings and re-render the compose file |
+| `fleetex version` | Show launcher + Docker versions |
 
 ## Configuration
 
-State lives in a single directory: `~/.paperfleet` by default (override with
-`PAPERFLEET_HOME` or `--home`). It contains `config.json`, a rendered
+State lives in a single directory: `~/.fleetex` by default (override with
+`FLEETEX_HOME` or `--home`). It contains `config.json`, a rendered
 `docker-compose.yml`, and a `data/` directory holding the bind-mounted volumes
 for the app, MongoDB, and Redis.
 
 ```bash
-paperfleet config                          # show current settings
-paperfleet config --port 9000              # change the HTTP port
-paperfleet config --image sharelatex/sharelatex:5.0   # pin an image version
-paperfleet config --data-dir /srv/overleaf/data       # move data to a big disk
+fleetex config                          # show current settings
+fleetex config --port 9000              # change the HTTP port
+fleetex config --image sharelatex/sharelatex:5.0   # pin an image version
+fleetex config --data-dir /srv/overleaf/data       # move data to a big disk
 ```
 
 ## The update workflow (PyPI + GitHub)
@@ -87,17 +87,17 @@ paperfleet config --data-dir /srv/overleaf/data       # move data to a big disk
 **Upgrade the Overleaf app itself** (new upstream `sharelatex/sharelatex` release):
 
 ```bash
-paperfleet up          # `up` pulls the latest image by default
+fleetex up          # `up` pulls the latest image by default
 # or pin a specific version:
-paperfleet config --image sharelatex/sharelatex:<tag> && paperfleet restart
+fleetex config --image sharelatex/sharelatex:<tag> && fleetex restart
 ```
 
 **Upgrade this launcher** (new features/fixes in the CLI):
 
 ```bash
-pip install -U paperfleet               # from PyPI
+pip install -U fleetex               # from PyPI
 # or from your fork:
-pip install -U "git+https://github.com/<you>/paperfleet.git"
+pip install -U "git+https://github.com/<you>/fleetex.git"
 ```
 
 **Make your own improvements** — fork this repo on GitHub, edit, and either

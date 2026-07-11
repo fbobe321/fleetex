@@ -1,7 +1,7 @@
-"""Configuration handling for the paperfleet launcher.
+"""Configuration handling for the fleetex launcher.
 
-Configuration lives in a single directory (default ``~/.paperfleet``, overridable
-with the ``PAPERFLEET_HOME`` env var or ``--home``). It contains:
+Configuration lives in a single directory (default ``~/.fleetex``, overridable
+with the ``FLEETEX_HOME`` env var or ``--home``). It contains:
 
 * ``config.json``         - launcher settings (port, image tags, data dir ...)
 * ``docker-compose.yml``  - the rendered compose file (regenerated on demand)
@@ -29,18 +29,18 @@ COMPOSE_FILENAME = "docker-compose.yml"
 
 def default_home() -> Path:
     """Return the config/home directory for the launcher."""
-    env = os.environ.get("PAPERFLEET_HOME")
+    env = os.environ.get("FLEETEX_HOME")
     if env:
         return Path(env).expanduser().resolve()
-    return (Path.home() / ".paperfleet").resolve()
+    return (Path.home() / ".fleetex").resolve()
 
 
 @dataclass
 class Config:
     """Launcher settings, serialized to ``config.json``."""
 
-    project_name: str = "paperfleet"
-    app_name: str = "PaperFleet"
+    project_name: str = "fleetex"
+    app_name: str = "Fleetex"
     http_port: int = 8080
     site_url: str = "http://localhost:8080"
     sharelatex_image: str = SHARELATEX_IMAGE
@@ -124,7 +124,7 @@ def _read_template(name: str) -> str:
     if _resource_files is not None:
         try:
             return (
-                _resource_files("paperfleet.templates")
+                _resource_files("fleetex.templates")
                 .joinpath(name)
                 .read_text(encoding="utf-8")
             )

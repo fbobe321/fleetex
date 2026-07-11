@@ -1,16 +1,16 @@
-"""Command-line interface for the paperfleet launcher.
+"""Command-line interface for the fleetex launcher.
 
 Usage examples::
 
-    paperfleet up                 # pull images and start the stack (detached)
-    paperfleet up --foreground    # start in the foreground, stream logs
-    paperfleet status             # show container status
-    paperfleet logs -f            # follow logs
-    paperfleet open               # open the web UI in a browser
-    paperfleet create-admin you@example.com
-    paperfleet down               # stop the stack (keeps data)
-    paperfleet down --volumes     # stop and DELETE all data
-    paperfleet config --port 9000 # change settings and re-render compose
+    fleetex up                 # pull images and start the stack (detached)
+    fleetex up --foreground    # start in the foreground, stream logs
+    fleetex status             # show container status
+    fleetex logs -f            # follow logs
+    fleetex open               # open the web UI in a browser
+    fleetex create-admin you@example.com
+    fleetex down               # stop the stack (keeps data)
+    fleetex down --volumes     # stop and DELETE all data
+    fleetex config --port 9000 # change settings and re-render compose
 """
 
 from __future__ import annotations
@@ -49,17 +49,17 @@ def cmd_up(args: argparse.Namespace) -> int:
         up_args.append("--detach")
     run(cfg, up_args)
     if not args.foreground:
-        print(f"\nPaperFleet is starting at {cfg.site_url}")
+        print(f"\nFleetex is starting at {cfg.site_url}")
         print("First boot can take a minute while the database initializes.")
         print("Create the first admin user with:")
-        print("    paperfleet create-admin you@example.com")
+        print("    fleetex create-admin you@example.com")
     return 0
 
 
 def cmd_down(args: argparse.Namespace) -> int:
     cfg = _load(args)
     if not cfg.compose_path.is_file():
-        return _err("nothing to stop (no compose file). Run `paperfleet up` first.")
+        return _err("nothing to stop (no compose file). Run `fleetex up` first.")
     ensure_ready(cfg)
     down_args = ["down"]
     if args.volumes:
@@ -80,7 +80,7 @@ def cmd_down(args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     cfg = _load(args)
     if not cfg.compose_path.is_file():
-        print("Not configured yet. Run `paperfleet up` to create and start the stack.")
+        print("Not configured yet. Run `fleetex up` to create and start the stack.")
         return 0
     ensure_ready(cfg)
     return run(cfg, ["ps"], check=False)
@@ -133,7 +133,7 @@ def cmd_create_admin(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         print(
-            "    paperfleet exec sharelatex node "
+            "    fleetex exec sharelatex node "
             "modules/server-ce-scripts/scripts/create-user.mjs "
             f"--admin --email={args.email}",
             file=sys.stderr,
@@ -145,7 +145,7 @@ def cmd_exec(args: argparse.Namespace) -> int:
     cfg = _load(args)
     ensure_ready(cfg)
     if not args.command:
-        return _err("provide a command to run, e.g. `paperfleet exec sharelatex bash`")
+        return _err("provide a command to run, e.g. `fleetex exec sharelatex bash`")
     return run(cfg, ["exec"] + args.command, check=False)
 
 
@@ -174,7 +174,7 @@ def cmd_config(args: argparse.Namespace) -> int:
         cfg.write_runtime_files()
         print(f"Updated config: {cfg.config_path}")
         print(f"Re-rendered compose: {cfg.compose_path}")
-        print("Run `paperfleet up` (or `restart`) to apply.")
+        print("Run `fleetex up` (or `restart`) to apply.")
     else:
         # No flags: show current config.
         print(f"home:            {cfg.home}")
@@ -190,7 +190,7 @@ def cmd_config(args: argparse.Namespace) -> int:
 
 def cmd_version(args: argparse.Namespace) -> int:
     cfg = _load(args)
-    print(f"paperfleet launcher {__version__}")
+    print(f"fleetex launcher {__version__}")
     print(f"targets image: {cfg.sharelatex_image}")
     probe = capture(cfg, ["version"])
     if probe.returncode == 0:
@@ -203,15 +203,15 @@ def cmd_version(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------- #
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="paperfleet",
-        description="PaperFleet: self-host your own private LaTeX editor "
+        prog="fleetex",
+        description="Fleetex: self-host your own private LaTeX editor "
         "(built on Overleaf Community Edition) via Docker with a single "
         "pip-installable command.",
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument(
         "--home",
-        help="Config/data directory (default: $PAPERFLEET_HOME or ~/.paperfleet)",
+        help="Config/data directory (default: $FLEETEX_HOME or ~/.fleetex)",
     )
     sub = p.add_subparsers(dest="command", required=True)
 

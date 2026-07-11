@@ -1,4 +1,4 @@
-"""Enable ``python -m paperfleet``."""
+"""Enable ``python -m fleetex``."""
 
 from .cli import main
 
