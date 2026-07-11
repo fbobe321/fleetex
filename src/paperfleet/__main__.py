@@ -1,4 +1,4 @@
-"""Enable ``python -m overleaf_ce``."""
+"""Enable ``python -m paperfleet``."""
 
 from .cli import main
 

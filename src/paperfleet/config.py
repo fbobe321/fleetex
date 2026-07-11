@@ -1,7 +1,7 @@
-"""Configuration handling for the overleaf-ce launcher.
+"""Configuration handling for the paperfleet launcher.
 
-Configuration lives in a single directory (default ``~/.overleaf-ce``, overridable
-with the ``OVERLEAF_CE_HOME`` env var or ``--home``). It contains:
+Configuration lives in a single directory (default ``~/.paperfleet``, overridable
+with the ``PAPERFLEET_HOME`` env var or ``--home``). It contains:
 
 * ``config.json``         - launcher settings (port, image tags, data dir ...)
 * ``docker-compose.yml``  - the rendered compose file (regenerated on demand)
@@ -29,18 +29,18 @@ COMPOSE_FILENAME = "docker-compose.yml"
 
 def default_home() -> Path:
     """Return the config/home directory for the launcher."""
-    env = os.environ.get("OVERLEAF_CE_HOME")
+    env = os.environ.get("PAPERFLEET_HOME")
     if env:
         return Path(env).expanduser().resolve()
-    return (Path.home() / ".overleaf-ce").resolve()
+    return (Path.home() / ".paperfleet").resolve()
 
 
 @dataclass
 class Config:
     """Launcher settings, serialized to ``config.json``."""
 
-    project_name: str = "overleaf-ce"
-    app_name: str = "Overleaf Community Edition"
+    project_name: str = "paperfleet"
+    app_name: str = "PaperFleet"
     http_port: int = 8080
     site_url: str = "http://localhost:8080"
     sharelatex_image: str = SHARELATEX_IMAGE
@@ -124,7 +124,7 @@ def _read_template(name: str) -> str:
     if _resource_files is not None:
         try:
             return (
-                _resource_files("overleaf_ce.templates")
+                _resource_files("paperfleet.templates")
                 .joinpath(name)
                 .read_text(encoding="utf-8")
             )

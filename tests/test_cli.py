@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from overleaf_ce.cli import build_parser
-from overleaf_ce.config import Config
+from paperfleet.cli import build_parser
+from paperfleet.config import Config
 
 
 def test_default_config_roundtrip(tmp_path: Path):
@@ -76,7 +76,7 @@ def test_parser_accepts_expected_commands(argv):
 
 
 def test_config_command_shows_when_no_flags(tmp_path: Path, capsys):
-    from overleaf_ce.cli import main
+    from paperfleet.cli import main
 
     rc = main(["--home", str(tmp_path), "config"])
     assert rc == 0

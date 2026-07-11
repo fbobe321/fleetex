@@ -1,9 +1,10 @@
-# overleaf-ce
+# PaperFleet
 
-**A pip-installable launcher for self-hosting [Overleaf Community Edition](https://github.com/overleaf/overleaf).**
+**Your own private, self-hosted LaTeX editor — a pip-installable launcher built on [Overleaf Community Edition](https://github.com/overleaf/overleaf).**
 
-Run your own Overleaf on a server you control, install and upgrade it with
-`pip`, and keep your customizations in a GitHub fork you can pull from.
+PaperFleet runs Overleaf on a server *you* control. Install and upgrade it with
+`pip install paperfleet`, and keep your customizations in a GitHub fork you can
+pull from. Your users only need a web browser.
 
 > This package is a thin, **zero-dependency** Python wrapper around Docker
 > Compose. It does **not** reimplement Overleaf — Overleaf CE is a set of
@@ -18,7 +19,7 @@ Run your own Overleaf on a server you control, install and upgrade it with
 You want an Overleaf alternative for work that:
 
 - runs on **your own server**, fully under your control,
-- installs and updates with a single command (`pip install -U overleaf-ce`),
+- installs and updates with a single command (`pip install -U paperfleet`),
 - and lets you keep improvements in a **GitHub fork** you can `git pull`.
 
 That's exactly what this is.
@@ -32,21 +33,21 @@ That's exactly what this is.
 ## Install
 
 ```bash
-pip install overleaf-ce        # from PyPI (once published)
+pip install paperfleet        # from PyPI (once published)
 ```
 
 or from your GitHub fork (the "GitHub pull" workflow, see below):
 
 ```bash
-pip install "git+https://github.com/<you>/overleaf-ce.git"
+pip install "git+https://github.com/<you>/paperfleet.git"
 ```
 
 ## Quick start
 
 ```bash
-overleaf-ce up                     # pull images + start the stack (detached)
-overleaf-ce create-admin you@work.example.com
-overleaf-ce open                   # open http://localhost:8080
+paperfleet up                     # pull images + start the stack (detached)
+paperfleet create-admin you@work.example.com
+paperfleet open                   # open http://localhost:8080
 ```
 
 Then log in as the admin you created. That's it — you have a working,
@@ -56,29 +57,29 @@ self-hosted Overleaf.
 
 | Command | What it does |
 |---|---|
-| `overleaf-ce up` | Pull images and start Overleaf (add `--foreground` to stream logs, `--no-pull` to skip pulling) |
-| `overleaf-ce down` | Stop the stack (data is preserved). `--volumes` also wipes data |
-| `overleaf-ce status` | Show container status |
-| `overleaf-ce logs -f [service]` | Tail logs (optionally for one service) |
-| `overleaf-ce restart` | Restart all services |
-| `overleaf-ce open` | Open the web UI in a browser |
-| `overleaf-ce create-admin <email>` | Create the first admin user |
-| `overleaf-ce exec <service> <cmd...>` | Run a command in a container (e.g. `exec sharelatex bash`) |
-| `overleaf-ce config [--port N ...]` | View or change settings and re-render the compose file |
-| `overleaf-ce version` | Show launcher + Docker versions |
+| `paperfleet up` | Pull images and start Overleaf (add `--foreground` to stream logs, `--no-pull` to skip pulling) |
+| `paperfleet down` | Stop the stack (data is preserved). `--volumes` also wipes data |
+| `paperfleet status` | Show container status |
+| `paperfleet logs -f [service]` | Tail logs (optionally for one service) |
+| `paperfleet restart` | Restart all services |
+| `paperfleet open` | Open the web UI in a browser |
+| `paperfleet create-admin <email>` | Create the first admin user |
+| `paperfleet exec <service> <cmd...>` | Run a command in a container (e.g. `exec sharelatex bash`) |
+| `paperfleet config [--port N ...]` | View or change settings and re-render the compose file |
+| `paperfleet version` | Show launcher + Docker versions |
 
 ## Configuration
 
-State lives in a single directory: `~/.overleaf-ce` by default (override with
-`OVERLEAF_CE_HOME` or `--home`). It contains `config.json`, a rendered
+State lives in a single directory: `~/.paperfleet` by default (override with
+`PAPERFLEET_HOME` or `--home`). It contains `config.json`, a rendered
 `docker-compose.yml`, and a `data/` directory holding the bind-mounted volumes
 for the app, MongoDB, and Redis.
 
 ```bash
-overleaf-ce config                          # show current settings
-overleaf-ce config --port 9000              # change the HTTP port
-overleaf-ce config --image sharelatex/sharelatex:5.0   # pin an image version
-overleaf-ce config --data-dir /srv/overleaf/data       # move data to a big disk
+paperfleet config                          # show current settings
+paperfleet config --port 9000              # change the HTTP port
+paperfleet config --image sharelatex/sharelatex:5.0   # pin an image version
+paperfleet config --data-dir /srv/overleaf/data       # move data to a big disk
 ```
 
 ## The update workflow (PyPI + GitHub)
@@ -86,17 +87,17 @@ overleaf-ce config --data-dir /srv/overleaf/data       # move data to a big disk
 **Upgrade the Overleaf app itself** (new upstream `sharelatex/sharelatex` release):
 
 ```bash
-overleaf-ce up          # `up` pulls the latest image by default
+paperfleet up          # `up` pulls the latest image by default
 # or pin a specific version:
-overleaf-ce config --image sharelatex/sharelatex:<tag> && overleaf-ce restart
+paperfleet config --image sharelatex/sharelatex:<tag> && paperfleet restart
 ```
 
 **Upgrade this launcher** (new features/fixes in the CLI):
 
 ```bash
-pip install -U overleaf-ce               # from PyPI
+pip install -U paperfleet               # from PyPI
 # or from your fork:
-pip install -U "git+https://github.com/<you>/overleaf-ce.git"
+pip install -U "git+https://github.com/<you>/paperfleet.git"
 ```
 
 **Make your own improvements** — fork this repo on GitHub, edit, and either

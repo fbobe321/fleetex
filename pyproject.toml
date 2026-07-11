@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "overleaf-ce"
+name = "paperfleet"
 version = "0.1.0"
 description = "A pip-installable launcher for self-hosting Overleaf Community Edition (Docker)."
 readme = "README.md"
@@ -31,15 +31,15 @@ Homepage = "https://github.com/overleaf/overleaf"
 Issues = "https://github.com/overleaf/overleaf/issues"
 
 [project.scripts]
-overleaf-ce = "overleaf_ce.cli:main"
+paperfleet = "paperfleet.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "build", "twine"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/overleaf_ce"]
+packages = ["src/paperfleet"]
 # Non-Python template files (compose + mongo init) ship inside the package.
-artifacts = ["src/overleaf_ce/templates/*"]
+artifacts = ["src/paperfleet/templates/*"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/src", "/tests", "/README.md", "/LICENSE"]
