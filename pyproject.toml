@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fleetex"
-version = "0.1.0"
-description = "A pip-installable launcher for self-hosting Overleaf Community Edition (Docker)."
+version = "0.1.1"
+description = "Fleetex: a pip-installable launcher to self-host your own LaTeX editor, powered by Overleaf Community Edition (Docker). Independent project, not affiliated with Overleaf."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "AGPL-3.0-only" }
-authors = [{ name = "Overleaf CE Launcher contributors" }]
-keywords = ["overleaf", "latex", "self-hosted", "docker", "sharelatex"]
+authors = [{ name = "Fleetex contributors" }]
+keywords = ["latex", "self-hosted", "docker", "editor", "overleaf"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -26,9 +26,10 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/overleaf/overleaf"
+Homepage = "https://github.com/fbobe321/fleetex"
+Repository = "https://github.com/fbobe321/fleetex"
+Issues = "https://github.com/fbobe321/fleetex/issues"
 "Upstream (Overleaf CE)" = "https://github.com/overleaf/overleaf"
-Issues = "https://github.com/overleaf/overleaf/issues"
 
 [project.scripts]
 fleetex = "fleetex.cli:main"

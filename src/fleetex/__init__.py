@@ -10,7 +10,7 @@ and operable with ``pip install fleetex`` and a friendly CLI
 Upstream project: https://github.com/overleaf/overleaf
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # The upstream image tags this launcher targets by default.
 SHARELATEX_IMAGE = "sharelatex/sharelatex:latest"

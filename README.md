@@ -3,8 +3,16 @@
 **Your own private, self-hosted LaTeX editor — a pip-installable launcher built on [Overleaf Community Edition](https://github.com/overleaf/overleaf).**
 
 Fleetex runs Overleaf on a server *you* control. Install and upgrade it with
-`pip install fleetex`, and keep your customizations in a GitHub fork you can
+`pip install fleetex`, and keep your customizations in a GitHub repo you can
 pull from. Your users only need a web browser.
+
+> **Disclaimer:** Fleetex is an independent, community-maintained launcher. It is
+> **not affiliated with, endorsed by, or sponsored by Overleaf**. It does not
+> redistribute Overleaf's source code — it pulls the official, publicly available
+> `sharelatex/sharelatex` Docker image at runtime. "Overleaf" and "ShareLaTeX"
+> are trademarks of their respective owners and are used here only nominatively
+> to describe what Fleetex runs. Fleetex is distributed under AGPL-3.0 for
+> compatibility with Overleaf Community Edition.
 
 > This package is a thin, **zero-dependency** Python wrapper around Docker
 > Compose. It does **not** reimplement Overleaf — Overleaf CE is a set of
