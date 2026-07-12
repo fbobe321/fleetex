@@ -45,6 +45,28 @@ route; this port normalizes to lowercase `/project/:id` throughout (a fresh
 frontend, not the Node bundle). Doc/file **contents** live in docstore/filestore
 (bridged/deferred) — this slice manages the project document + tree metadata.
 
+## Editor page-load slice (Phase 7c)
+
+The API the editor calls when opening a project (all `ensureUserCanReadProject`):
+
+- **`GET /project/:id`** — bootstrap JSON: `{projectId, projectName, user,
+  userSettings (from user.ace), anonymous, wsUrl, maxDocLength, compiler,
+  rootDocId, ...}`. Source: `projects` + `users` + config. No bridge.
+- **`GET /project/:id/entities`** — flat file-tree `{project_id, entities:[{path,type}]}`
+  (walks the rootFolder tree). No bridge.
+- **`GET /project/:id/doc/:doc_id`** — doc content: `pathname` from the projects
+  tree + `{lines, version, ranges}` **bridged from the docstore service** (the one
+  real cross-service bridge; `?plain=true` → text). This is the shape
+  document-updater's fallback loader expects.
+
+Join model view (`POST /project/:id/join`, from 7a) was enriched with the fields
+the editor needs (mainBibliographyDoc_id, features defaults, dropboxEnabled, ...).
+The browser loads live doc *content* via real-time `joinDoc`→document-updater; this
+HTTP `doc` endpoint is the docstore-backed initial-state loader.
+
+**Deferred:** filestore binary download (`/file/:id`), spelling dictionary, the
+`otMigrationStage`/history fields (stubbed to 0/[]), anonymous-token editor access.
+
 ## Deferred / stubbed (documented)
 
 Registration (admin-only upstream; use `UserManager.create_user` here), CSRF

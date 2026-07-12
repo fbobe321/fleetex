@@ -19,6 +19,7 @@ from redis import asyncio as aioredis
 from . import authorization as authz
 from .auth import authenticate
 from .config import WebConfig
+from .editor import DocstoreClient, register_editor_routes
 from .passwords import verify_password
 from .projects import ProjectManager, register_project_routes
 from .sessions import SessionStore, generate_session_id, get_logged_in_user_id, serialize_user
@@ -43,7 +44,7 @@ def _check_basic_auth(request: Request, config: WebConfig) -> bool:
     return user == config.web_api_user and password == config.web_api_password
 
 
-def build_app(config: WebConfig | None = None, *, db=None, redis=None) -> FastAPI:
+def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=None) -> FastAPI:
     config = config or WebConfig.from_env()
     settings = Settings.from_env("web", default_port=config.port, env={})
     app = create_app(settings, connect_mongo=False, connect_redis=False, status_text="web is alive")
@@ -149,6 +150,9 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None) -> FastAP
         )
 
     register_project_routes(app, pm=projects, db=db, store=store, config=config)
+    docstore = docstore if docstore is not None else DocstoreClient(config.docstore_url)
+    app.state.docstore = docstore
+    register_editor_routes(app, pm=projects, db=db, store=store, config=config, docstore=docstore)
     return app
 
 

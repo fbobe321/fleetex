@@ -298,19 +298,39 @@ def _sort(views: list[dict], sort: dict) -> list[dict]:
     return sorted(views, key=keys.get(by, keys["lastUpdated"]), reverse=reverse)
 
 
+# --- access checks (shared with editor routes) --------------------------- #
+def can_admin(project: dict, uid: str) -> bool:
+    return str(project.get("owner_ref")) == uid
+
+
+def can_write(project: dict, uid: str) -> bool:
+    return authz.privilege_level_for_user(project, uid) in (authz.OWNER, authz.READ_AND_WRITE)
+
+
+def can_read(project: dict, uid: str) -> bool:
+    return authz.privilege_level_for_user(project, uid) is not authz.NONE
+
+
+async def load_with_access(request: Request, project_id: str, *, pm, store, config, check):
+    """Return ((uid, project), None) or (None, Response) short-circuit."""
+    _sid, session = await store.load_from_cookie(request.cookies.get(config.cookie_name))
+    uid = get_logged_in_user_id(session)
+    if not uid:
+        return None, Response(status_code=401)
+    project = await pm.find_by_id(project_id)
+    if project is None:
+        return None, Response(status_code=404)
+    if not check(project, uid):
+        return None, Response(status_code=403)
+    return (uid, project), None
+
+
 def register_project_routes(app: FastAPI, *, pm: ProjectManager, db, store, config) -> None:
     async def _user_id(request: Request) -> str | None:
         _sid, session = await store.load_from_cookie(request.cookies.get(config.cookie_name))
         return get_logged_in_user_id(session)
 
-    def _can_admin(project: dict, uid: str) -> bool:
-        return str(project.get("owner_ref")) == uid
-
-    def _can_write(project: dict, uid: str) -> bool:
-        return authz.privilege_level_for_user(project, uid) in (authz.OWNER, authz.READ_AND_WRITE)
-
-    def _can_read(project: dict, uid: str) -> bool:
-        return authz.privilege_level_for_user(project, uid) is not authz.NONE
+    _can_admin, _can_write, _can_read = can_admin, can_write, can_read
 
     async def _load(request: Request, project_id: str, check):
         """Return (uid, project) or a Response to short-circuit."""

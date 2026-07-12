@@ -116,19 +116,31 @@ real-time. 156 tests, CI green. web + document-updater/OT still Node (bridged).
     TPDS, example-template creation (needs filestore). Route casing normalized to
     lowercase (upstream mixes :Project_id/:project_id).
 
+- **Phase 7c (`web` — editor page-load slice):** DONE ✅ — `services/web/editor.py`.
+  3 read endpoints: `GET /project/:id` (bootstrap JSON: user, userSettings from
+  user.ace, wsUrl, compiler, rootDocId, ...), `GET /project/:id/entities` (flat
+  file-tree walk), `GET /project/:id/doc/:doc_id` (**bridges the docstore service**
+  for lines/version/ranges; pathname from the projects tree; ?plain=true→text).
+  Enriched the join model view (mainBibliographyDoc_id, features defaults, etc).
+  46 web tests. **This is the first real cross-service bridge** (web→docstore HTTP).
+  - **Deferred:** filestore binary download, spelling, otMigrationStage/history
+    (stubbed), anonymous-token editor access.
+
 ## Next session should do
-**Phase 7c — `web`: editor page-load API slice.** The API the frontend calls when
-opening a project (`GET /project/:id` editor bootstrap / `GET /project/:id/entities`
-or the joinProject data). This ties web + docstore + real-time together. Steps:
-1. Subagent-map ONLY the editor bootstrap in `/data3/overleaf/services/web` — what
-   data the editor page needs on load (project view, user, docs list, the
-   /project/:id/join already exists), and GET endpoints for the file tree /
-   document listing. Ignore compile (clsi already done) + frontend rendering.
-2. Add routes to services/web, bridging docstore (already ported!) for doc lists.
-3. mongomock tests. Update this file; commit.
-Read ONLY this file, ROADMAP.md, and the web editor source. Reuse services/web +
-services/docstore. Later: file tree/uploads, serving frontend bundle. Phase 8 (OT
-core) remains LAST + OPTIONAL.
+**Phase 7d — `web`: file tree operations + uploads slice.** The mutating
+editor/file-tree ops. Steps:
+1. Subagent-map ONLY file-tree mutations in `/data3/overleaf/services/web` — add/
+   rename/move/delete doc & folder (`POST /project/:id/doc`, `/folder`,
+   `/project/:id/:entity/:id/rename`, move, delete), and file upload
+   (`POST /project/:id/upload`, bridging filestore — already ported!). Note how
+   these update the projects rootFolder tree + version, and emit real-time events
+   (reciveNewDoc etc via the editor-events channel — real-time is ported too).
+2. Add routes + tree-mutation logic to services/web; bridge filestore for uploads,
+   docstore for new doc contents. mongomock tests.
+3. Update this file; commit.
+Read ONLY this file, ROADMAP.md, and the web file-tree source. Reuse services/web
++ docstore + filestore + real-time (editor-events publish). Later: serving the
+frontend bundle. Phase 8 (OT core) remains LAST + OPTIONAL.
 
 ## Services ported (Node → Python)
 _(none yet)_

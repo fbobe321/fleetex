@@ -19,6 +19,13 @@ class WebConfig:
     web_api_password: str = "password"
     mongo_url: str = "mongodb://mongo/sharelatex"
     redis_url: str = "redis://redis:6379"
+    docstore_url: str = "http://docstore:3016"
+    # editor bootstrap config
+    ws_url: str = "/socket.io"
+    ws_retry_handshake: int = 5
+    max_doc_length: int = 2 * 1024 * 1024
+    default_compiler: str = "pdflatex"
+    languages: list = field(default_factory=lambda: ["en", "fr", "de", "es"])
 
     @property
     def cookie_max_age_s(self) -> int:
@@ -41,4 +48,7 @@ class WebConfig:
             web_api_password=env.get("WEB_API_PASSWORD", "password"),
             mongo_url=env.get("MONGO_URL") or env.get("OVERLEAF_MONGO_URL") or "mongodb://mongo/sharelatex",
             redis_url=env.get("REDIS_URL", f"redis://{host}:{env.get('REDIS_PORT', '6379')}"),
+            docstore_url=env.get("DOCSTORE_URL", "http://docstore:3016"),
+            ws_url=env.get("WEBSOCKET_URL", "/socket.io"),
+            ws_retry_handshake=int(env.get("WEBSOCKET_RETRY_HANDSHAKE", 5)),
         )

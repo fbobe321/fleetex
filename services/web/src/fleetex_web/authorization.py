@@ -92,14 +92,31 @@ def build_project_view(project: dict, owner: dict | None, restricted: bool) -> d
         "_id": str(project["_id"]),
         "name": project.get("name", ""),
         "rootDoc_id": str(project["rootDoc_id"]) if project.get("rootDoc_id") else None,
+        "mainBibliographyDoc_id": str(project["mainBibliographyDoc_id"]) if project.get("mainBibliographyDoc_id") else None,
         "rootFolder": project.get("rootFolder", []),
         "publicAccesLevel": project.get("publicAccesLevel", "private"),
+        "dropboxEnabled": False,
         "compiler": project.get("compiler", "pdflatex"),
         "description": project.get("description", ""),
         "spellCheckLanguage": project.get("spellCheckLanguage", "en"),
+        "deletedByExternalDataSource": project.get("deletedByExternalDataSource", False),
         "imageName": project.get("imageName"),
         "owner": owner_view,
         "members": [] if restricted else project.get("members", []),
         "invites": [] if restricted else project.get("invites", []),
-        "features": project.get("features", {}),
+        "features": project.get("features") or _DEFAULT_FEATURES,
     }
+
+
+_DEFAULT_FEATURES = {
+    "collaborators": -1,
+    "versioning": True,
+    "dropbox": False,
+    "compileTimeout": 60,
+    "compileGroup": "standard",
+    "templates": True,
+    "references": True,
+    "trackChanges": True,
+    "trackChangesVisible": True,
+    "symbolPalette": True,
+}
