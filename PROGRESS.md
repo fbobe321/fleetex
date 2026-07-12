@@ -62,29 +62,50 @@
     in CI). **Deferred:** URL resources (need filestore UrlCache), docker sandboxed
     compiles, PDF caching, output-zip.
 
+- **Phase 6 (`real-time`):** DONE ✅ — `services/real-time` (`fleetex-realtime`).
+  Websocket layer via python-socketio (ASGI) + FastAPI HTTP, Redis-backed.
+  Fully-faithful protocol-agnostic core (tested): Redis bridge (editor-events +
+  applied-ops shapes, fan-out with {v,doc} ack vs full-op, tsRT strip, dup skip),
+  document-updater queue (PendingUpdates:{doc} + pending-updates-list), Connected
+  UsersManager (SET+HASH keys+TTLs+10s refresh filter), WebApiManager join,
+  joinDoc (JS line encoding + restricted comment strip), applyOtUpdate (metadata
+  + op-type authorization), clientTracking, disconnect→flush. HTTP: /, /status,
+  /clients, count-connected-clients, sendMessage, drain, disconnect. 31 tests,
+  boots under uvicorn (socket.io handshake responds).
+  - **⚠️ HEADLINE CAVEAT:** Node uses **Socket.IO v0.9 protocol**; python-socketio
+    is EIO3/4 — **NOT wire-compatible** with Overleaf's frontend socket.io-client.
+    A real swap needs the browser client updated. The Redis/HTTP interop IS
+    byte-compatible with Node web/document-updater.
+  - **Simplified (documented):** cookie/session-store auth (user id taken from
+    socket `auth` payload instead), per-channel subscription optimization, drain
+    pacing. web + document-updater are bridged (still Node), not reimplemented.
+
 ## Testing note
 Each service is its own package with its own pytest config. Run per-service
 (`cd services/<name> && pytest`) or all at once via `bash services/test-all.sh`.
 Do NOT `pytest services/...` from the repo root — the launcher's root config
 shadows the per-service `asyncio_mode` and async tests misfire.
 
+## Milestone: the "tidy tier" (Phases 0-6) is COMPLETE ✅
+All 6 services + foundations done: notifications, chat, filestore, docstore, clsi,
+real-time. 156 tests, CI green. web + document-updater/OT still Node (bridged).
+
 ## Next session should do
-**Phase 6 — `real-time` (★★★★).** The websocket layer — HARDER (stateful,
-socket.io protocol, Redis pub/sub). This is where the client editor connects.
-Steps:
-1. Subagent-map `/data3/overleaf/services/real-time` — the socket.io events the
-   frontend emits/expects (joinProject, joinDoc, applyOtUpdate, leaveDoc, etc.),
-   the Redis pub/sub channels bridging to document-updater, session/auth handshake,
-   and the HTTP surface (/status, health). Note exact event names + payloads.
-2. Create `services/real-time/`; implement a `python-socketio` (ASGI) server
-   matching the frontend's events. Redis via redis-py (kit already provides it).
-   document-updater is still Node at this point — bridge to it via Redis.
-3. Tests: socket.io connection + event round-trips (python-socketio has a test
-   client); Redis interactions (fakeredis). Update this file; commit.
-Read ONLY this file, ROADMAP.md, and the real-time source. NOTE: real-time needs
-`python-socketio` (new dep) — the kit's create_app is HTTP-only, so this service
-mounts a socket.io ASGI app alongside. Likely needs care; may split into
-"connection/handshake" vs "doc events" if large.
+**Phase 7 — `web` backend (★★★★, the monolith).** This is BIG — many sessions.
+Do NOT try it in one go. Recommended first slice: **auth & sessions** only.
+1. Subagent-map ONLY the auth slice of `/data3/overleaf/services/web` — login,
+   register, logout, password, session handling (the `overleaf.sid` cookie +
+   Redis session store that real-time/others read), and the `/project/:id/join`
+   endpoint real-time already calls. Ignore the rest of web for now.
+2. Create `services/web/` on the kit; implement auth + session store (Redis,
+   `sess:<id>` shape) + project-join. This also lets real-time's cookie-session
+   auth gap be closed later.
+3. Tests: login/register/session round-trips, /project/:id/join contract.
+Subsequent web slices (later sessions): project CRUD, editor page + the API the
+frontend calls on load, file tree/uploads, serving the frontend bundle.
+Read ONLY this file, ROADMAP.md, and the web auth source. See ROADMAP Phase 7 for
+the full sub-phase list. Phase 8 (OT core: document-updater/project-history) is
+LAST and OPTIONAL — fine to leave on Node forever.
 
 ## Services ported (Node → Python)
 _(none yet)_
