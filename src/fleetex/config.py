@@ -123,13 +123,18 @@ def _read_template(name: str) -> str:
     """Read a packaged template file, working both installed and from source."""
     if _resource_files is not None:
         try:
+            # Resolve via the ``fleetex`` package (which has an __init__), not the
+            # ``fleetex.templates`` data dir: on Python 3.9 the latter is a
+            # namespace package whose __file__ is None, so files() raises
+            # TypeError (Path(None)). Going through the real package avoids that.
             return (
-                _resource_files("fleetex.templates")
+                _resource_files("fleetex")
+                .joinpath("templates")
                 .joinpath(name)
                 .read_text(encoding="utf-8")
             )
-        except (FileNotFoundError, ModuleNotFoundError):
+        except (FileNotFoundError, ModuleNotFoundError, TypeError, NotADirectoryError):
             pass
-    # Fallback for editable/source layouts.
+    # Fallback for editable/source layouts (also the safety net if the above fails).
     local = Path(__file__).parent / "templates" / name
     return local.read_text(encoding="utf-8")
