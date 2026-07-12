@@ -90,22 +90,33 @@ shadows the per-service `asyncio_mode` and async tests misfire.
 All 6 services + foundations done: notifications, chat, filestore, docstore, clsi,
 real-time. 156 tests, CI green. web + document-updater/OT still Node (bridged).
 
+- **Phase 7a (`web` — auth slice):** DONE ✅ — `services/web` (`fleetex-web`).
+  FIRST slice of the monolith. Sessions (`s:<sid>.<HMAC-SHA256>` cookie —
+  **verified byte-identical to Node's cookie-signature via openssl**; Redis
+  `sess:<sid>` JSON + `validationToken v1:sid[-4:]`; `passport.user` shape),
+  bcrypt `$2a$12$` passwords, `POST /login` (signed cookie + session, 401 wrong
+  pw, 400 bad email), `POST /logout`, `POST /user/password/update`, and the
+  internal **`POST /project/:id/join`** (basic-auth) with full privilegeLevel +
+  isRestrictedUser + redacted project view. 23 tests, boots under uvicorn.
+  **This closes the real-time cookie/session gap** — a browser logging in here
+  gets a session real-time can read.
+  - **Deferred:** registration endpoint (use UserManager.create_user), CSRF,
+    rate-limit, captcha, HIBP, email, SSO/LDAP, loginEpoch lock. Rest of web
+    (project/editor/files/frontend) = future Phase-7 slices.
+
 ## Next session should do
-**Phase 7 — `web` backend (★★★★, the monolith).** This is BIG — many sessions.
-Do NOT try it in one go. Recommended first slice: **auth & sessions** only.
-1. Subagent-map ONLY the auth slice of `/data3/overleaf/services/web` — login,
-   register, logout, password, session handling (the `overleaf.sid` cookie +
-   Redis session store that real-time/others read), and the `/project/:id/join`
-   endpoint real-time already calls. Ignore the rest of web for now.
-2. Create `services/web/` on the kit; implement auth + session store (Redis,
-   `sess:<id>` shape) + project-join. This also lets real-time's cookie-session
-   auth gap be closed later.
-3. Tests: login/register/session round-trips, /project/:id/join contract.
-Subsequent web slices (later sessions): project CRUD, editor page + the API the
-frontend calls on load, file tree/uploads, serving the frontend bundle.
-Read ONLY this file, ROADMAP.md, and the web auth source. See ROADMAP Phase 7 for
-the full sub-phase list. Phase 8 (OT core: document-updater/project-history) is
-LAST and OPTIONAL — fine to leave on Node forever.
+**Phase 7b — `web`: project list + CRUD slice.** Build on services/web. Steps:
+1. Subagent-map ONLY project management in `/data3/overleaf/services/web` — the
+   project dashboard API (`GET /project` list / `POST /api/project` etc.), create
+   project, rename, delete/archive/trash, clone, and the `projects` collection
+   doc shape (owner_ref, collaberator_refs, rootFolder tree, rootDoc_id, tokens,
+   publicAccesLevel). Ignore editor internals + frontend for now.
+2. Add project routes + a ProjectManager to services/web (reuse the session auth
+   + authorization already built). mongomock tests.
+3. Update this file; commit.
+Read ONLY this file, ROADMAP.md, and the web project source. Reuse services/web's
+sessions.py/authorization.py. Later slices: editor page load API, file tree/
+uploads, serving the frontend bundle. Phase 8 (OT core) remains LAST + OPTIONAL.
 
 ## Services ported (Node → Python)
 _(none yet)_

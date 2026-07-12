@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fleetex-web"
+version = "0.1.0"
+description = "Fleetex Python port of Overleaf's web service (authentication slice)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0-only" }
+dependencies = [
+    "fleetex-service-kit",
+    "bcrypt>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-asyncio>=0.23", "mongomock-motor>=0.0.29", "fakeredis>=2.20"]
+
+[project.scripts]
+fleetex-web = "fleetex_web.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fleetex_web"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
