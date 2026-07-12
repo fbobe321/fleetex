@@ -19,7 +19,7 @@ Example::
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -30,6 +30,7 @@ class Response:
     status: int
     json: Any = None
     text: str = ""
+    headers: dict = field(default_factory=dict)
 
     @classmethod
     def from_httpx(cls, r: httpx.Response) -> "Response":
@@ -40,7 +41,7 @@ class Response:
                 body_json = r.json()
             except (json.JSONDecodeError, ValueError):
                 body_json = None
-        return cls(status=r.status_code, json=body_json, text=r.text)
+        return cls(status=r.status_code, json=body_json, text=r.text, headers=dict(r.headers))
 
 
 async def call_asgi(app, method: str, path: str, **kwargs) -> Response:

@@ -34,6 +34,20 @@
     conversion (format/style → imagemagick+optipng) is coded but UNVERIFIED (no
     binaries in CI); failures → 500 as in Node.
 
+- **Phase 4 (`docstore`):** DONE ✅ — `services/docstore` (`fleetex-docstore`).
+  Mongo (`docs`) + **archiving to object storage**. ~18 routes: single-doc
+  (get/peek/raw/deleted), project reads (getAllDocs/doc-with-ranges/ranges/
+  doc-versions/doc-deleted/comment-thread-ids/tracked-changes-user-ids/has-ranges),
+  writes (POST update, PATCH soft-delete, deprecated DELETE→500), archive/
+  unarchive/destroy. rev bumps only on lines/ranges change; version-decrement→409;
+  optimistic-lock retry; docViews omit null fields; unarchive→200. Archive payload
+  = plain JSON `{lines,ranges,rev,schema_v:1}` key `projectId/docId`; peek reads
+  archived w/o writing Mongo (x-doc-status). 19 tests, boots under uvicorn.
+  - **Deviations (documented):** plain `$set` update instead of Node's
+    `$literal` aggregation pipeline (same optimistic-lock behavior). Archive
+    backends = in-memory (tests) + fs; **S3/GCS deferred to the persistor port**.
+  - Kit gained `Response.headers` in the contract harness (for x-doc-status).
+
 ## Testing note
 Each service is its own package with its own pytest config. Run per-service
 (`cd services/<name> && pytest`) or all at once via `bash services/test-all.sh`.
@@ -41,17 +55,21 @@ Do NOT `pytest services/...` from the repo root — the launcher's root config
 shadows the per-service `asyncio_mode` and async tests misfire.
 
 ## Next session should do
-**Phase 4 — `docstore` (★★).** Back to Mongo territory (JSON docs), but with
-archiving semantics. Steps:
-1. Subagent-map `/data3/overleaf/services/docstore` — routes, the `docs` (and any
-   `docOps`/deleted-docs) collections + exact shapes, how doc lines/ranges are
-   stored, versioning, and the **archiving-to-object-storage** behavior (does it
-   call filestore/persistor? gzip? inline vs archived docs?). Note Mongo/Redis use.
-2. Create `services/docstore/` on the kit; implement routes; mongomock tests.
-3. Update this file; commit.
-Read ONLY this file, ROADMAP.md, and the docstore source. notifications/chat are
-the Mongo-service template; filestore showed the streaming/persistor pattern if
-docstore archives to object storage.
+**Phase 5 — `clsi` (★★★).** The LaTeX compiler orchestration — high-value and
+isolated, but new territory (shells out to a TeX distribution, manages compile
+dirs + output files). Steps:
+1. Subagent-map `/data3/overleaf/services/clsi` — the compile request/response
+   API (POST compile with resources, sync/word-count, output file serving), how
+   it runs latexmk/pdflatex, the compile+output directory layout, caching, and
+   whether it uses Mongo/Redis. Note the request/response JSON shapes exactly.
+2. Create `services/clsi/`; implement the compile orchestration (shelling to a
+   TeX engine — likely UNVERIFIED in CI without a TeX install, like filestore's
+   conversions; structure it so the request handling/dir management IS testable).
+3. Tests: request parsing, dir layout, output-file listing/serving; mark the
+   actual-compile path as needs-TeX. Update this file; commit.
+Read ONLY this file, ROADMAP.md, and the clsi source. Note: clsi is bigger
+(~7.9k LOC) — expect this to possibly need 2 sessions; if so, split at
+"request/dir handling" (session A) vs "compile+output serving" (session B).
 
 ## Services ported (Node → Python)
 _(none yet)_
