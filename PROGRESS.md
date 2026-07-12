@@ -22,6 +22,18 @@
   - **Same caveat as Phase 1:** verified vs spec + mongomock, not yet diffed vs
     a live Node instance (`FLEETEX_NODE_BASE=... pytest -k contract_vs_node`).
 
+- **Phase 3 (`filestore`):** DONE ✅ — `services/filestore` (`fleetex-filestore`).
+  Storage-only, no Mongo/Redis. Local-FS backend fully ported (flattened keys vs
+  subdirectory blobs, atomic temp+rename writes, range reads, md5, copy/delete).
+  Routes: template HEAD/GET/POST (+sub_type), generic `/bucket/:bucket/key/*`,
+  history global+project blob GETs, /status (`filestore is up`), /health_check
+  (`OK`). Matches quirks: **range returns 200 not 206** with sliced body & no
+  range headers; GET sets no Content-Type; HEAD sets only Content-Length;
+  404-or-500-only errors; cacheWarm→`OK`. 23 tests, boots under uvicorn.
+  - **Gaps (documented):** S3/GCS backends not ported (fs only). Image
+    conversion (format/style → imagemagick+optipng) is coded but UNVERIFIED (no
+    binaries in CI); failures → 500 as in Node.
+
 ## Testing note
 Each service is its own package with its own pytest config. Run per-service
 (`cd services/<name> && pytest`) or all at once via `bash services/test-all.sh`.
@@ -29,16 +41,17 @@ Do NOT `pytest services/...` from the repo root — the launcher's root config
 shadows the per-service `asyncio_mode` and async tests misfire.
 
 ## Next session should do
-**Phase 3 — `filestore` (★★).** New territory: binary file storage, not just
-Mongo JSON. Steps:
-1. Subagent-map `/data3/overleaf/services/filestore` — routes (upload/download/
-   copy/delete, streaming), the storage backends (local FS + S3), bucket/key
-   layout, and whether it uses Mongo/Redis at all.
-2. Create `services/filestore/`; implement **local-FS backend first**, S3 second.
-3. Focus tests on streaming upload/download parity and the key/path layout.
-4. Update this file; commit.
-Read ONLY this file, ROADMAP.md, and the filestore source. chat/notifications
-are the implementation template for structure (manager/serialize/app + kit).
+**Phase 4 — `docstore` (★★).** Back to Mongo territory (JSON docs), but with
+archiving semantics. Steps:
+1. Subagent-map `/data3/overleaf/services/docstore` — routes, the `docs` (and any
+   `docOps`/deleted-docs) collections + exact shapes, how doc lines/ranges are
+   stored, versioning, and the **archiving-to-object-storage** behavior (does it
+   call filestore/persistor? gzip? inline vs archived docs?). Note Mongo/Redis use.
+2. Create `services/docstore/` on the kit; implement routes; mongomock tests.
+3. Update this file; commit.
+Read ONLY this file, ROADMAP.md, and the docstore source. notifications/chat are
+the Mongo-service template; filestore showed the streaming/persistor pattern if
+docstore archives to object storage.
 
 ## Services ported (Node → Python)
 _(none yet)_
