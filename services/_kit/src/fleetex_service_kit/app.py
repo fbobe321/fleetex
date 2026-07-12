@@ -33,6 +33,7 @@ def create_app(
     *,
     connect_mongo: bool = True,
     connect_redis: bool = True,
+    status_text: str | None = None,
 ) -> FastAPI:
     logger = configure_logging(settings.service_name, settings.log_level)
 
@@ -60,9 +61,11 @@ def create_app(
     async def health() -> dict:
         return {"status": "ok", "service": settings.service_name}
 
+    # Each ported service can match its Node original's exact /status body.
+    _status_body = status_text or f"{settings.service_name} is alive (fleetex)\n"
+
     @app.get("/status", include_in_schema=False, response_class=PlainTextResponse)
     async def status() -> str:
-        # Matches Overleaf's "<service> is alive" liveness convention.
-        return f"{settings.service_name} is alive (fleetex)\n"
+        return _status_body
 
     return app

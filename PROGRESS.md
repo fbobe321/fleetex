@@ -5,23 +5,28 @@
 
 ## Current status
 - **Launcher (v0.1.1):** shipped — runs the real Node Overleaf via Docker. ✅
-- **Phase 0 (foundations):** DONE ✅ — `services/_kit` (`fleetex-service-kit`)
-  provides `Settings`, `create_app` (FastAPI + Mongo/Redis lifespan + /health,
-  /status), JSON logging, lazy db factories, and the contract-test harness
-  (`call_asgi`/`call_http`/`assert_match`). 12 tests pass. `services/README.md`
-  documents the Node↔Python flip mechanism.
+- **Phase 0 (foundations):** DONE ✅ — `services/_kit` (`fleetex-service-kit`):
+  `Settings`, `create_app` (FastAPI + Mongo/Redis lifespan + /health, /status,
+  optional `status_text`), JSON logging, lazy db factories, contract harness. 12 tests.
+- **Phase 1 (`notifications`):** DONE ✅ — `services/notifications`
+  (`fleetex-notifications`). Full port: 8 routes + /status + /health_check + 404
+  catch-all, dedup/forceCreate, soft-read via `$unset templateKey`, by-key ops,
+  bulk delete, Express-compatible JSON (ObjectId→hex, Date→`...Z`). 19 tests pass
+  (+1 skipped = live-Node diff), boots under uvicorn, /status matches Node.
+  - **Caveat:** parity verified vs spec + in-memory mongomock, NOT yet diffed
+    against a running Node instance. To do so: run Node notifications + Mongo,
+    then `FLEETEX_NODE_BASE=... pytest services/notifications -k contract_vs_node`.
 
 ## Next session should do
-**Phase 1 — `notifications` (the ★ warm-up service).** Steps:
-1. Read the Node original at `/data3/overleaf/services/notifications` — map its
-   HTTP routes and the Mongo `notifications` collection shape. (Delegate this
-   read to a subagent to keep main context cheap.)
-2. Create `services/notifications/` (pyproject depending on `fleetex-service-kit`)
-   and implement the routes with `create_app`.
-3. Write contract tests (vs Node ground truth via `FLEETEX_NODE_BASE`, plus
-   fixtures so CI passes without Node).
-4. Add the compose override + smoke test; update this file; commit.
-Do ONLY Phase 1. Read only this file, ROADMAP.md, and the notifications source.
+**Phase 2 — `chat` (★).** Same recipe as Phase 1:
+1. Subagent-map the Node original at `/data3/overleaf/services/chat` (routes,
+   Mongo collections/shape — chat has messages + threads/rooms, slightly richer
+   than notifications).
+2. Create `services/chat/` on the kit; implement routes.
+3. Unit + HTTP tests via mongomock + call_asgi; optional Node diff.
+4. Update this file; commit.
+Read ONLY this file, ROADMAP.md, and the chat source. Reuse the notifications
+service as the implementation template.
 
 ## Services ported (Node → Python)
 _(none yet)_
