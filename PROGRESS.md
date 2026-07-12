@@ -104,19 +104,31 @@ real-time. 156 tests, CI green. web + document-updater/OT still Node (bridged).
     rate-limit, captcha, HIBP, email, SSO/LDAP, loginEpoch lock. Rest of web
     (project/editor/files/frontend) = future Phase-7 slices.
 
+- **Phase 7b (`web` — project CRUD slice):** DONE ✅ — `services/web/projects.py`.
+  `POST /api/project` list (cascading owner→invite→token dedupe, per-user
+  archived/trashed booleans, accessLevel/source, owner injection, filters+sort),
+  `GET /user/projects`, `POST /project/new` (doc+tree+main.tex), rename/settings/
+  settings-admin (owner/write auth), archive/trash (per-user arrays), soft-delete
+  →deletedProjects, clone (tree copy w/ fresh ids). Name validation (≤150, no /\,
+  no lead/trail ws). 37 web tests. **Also fixed a latent authz bug:** logged-in
+  token members (tokenAccess*_refs on tokenBased projects) now get read access.
+  - **Deferred:** doc/file *contents* (docstore/filestore bridge), history id,
+    TPDS, example-template creation (needs filestore). Route casing normalized to
+    lowercase (upstream mixes :Project_id/:project_id).
+
 ## Next session should do
-**Phase 7b — `web`: project list + CRUD slice.** Build on services/web. Steps:
-1. Subagent-map ONLY project management in `/data3/overleaf/services/web` — the
-   project dashboard API (`GET /project` list / `POST /api/project` etc.), create
-   project, rename, delete/archive/trash, clone, and the `projects` collection
-   doc shape (owner_ref, collaberator_refs, rootFolder tree, rootDoc_id, tokens,
-   publicAccesLevel). Ignore editor internals + frontend for now.
-2. Add project routes + a ProjectManager to services/web (reuse the session auth
-   + authorization already built). mongomock tests.
-3. Update this file; commit.
-Read ONLY this file, ROADMAP.md, and the web project source. Reuse services/web's
-sessions.py/authorization.py. Later slices: editor page load API, file tree/
-uploads, serving the frontend bundle. Phase 8 (OT core) remains LAST + OPTIONAL.
+**Phase 7c — `web`: editor page-load API slice.** The API the frontend calls when
+opening a project (`GET /project/:id` editor bootstrap / `GET /project/:id/entities`
+or the joinProject data). This ties web + docstore + real-time together. Steps:
+1. Subagent-map ONLY the editor bootstrap in `/data3/overleaf/services/web` — what
+   data the editor page needs on load (project view, user, docs list, the
+   /project/:id/join already exists), and GET endpoints for the file tree /
+   document listing. Ignore compile (clsi already done) + frontend rendering.
+2. Add routes to services/web, bridging docstore (already ported!) for doc lists.
+3. mongomock tests. Update this file; commit.
+Read ONLY this file, ROADMAP.md, and the web editor source. Reuse services/web +
+services/docstore. Later: file tree/uploads, serving frontend bundle. Phase 8 (OT
+core) remains LAST + OPTIONAL.
 
 ## Services ported (Node → Python)
 _(none yet)_

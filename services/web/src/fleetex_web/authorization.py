@@ -29,6 +29,12 @@ def privilege_level_for_user(project: dict, user_id: str | None, is_admin: bool 
             return REVIEW
         if user_id in _ids(project.get("readOnly_refs")):
             return READ_ONLY
+        # logged-in token members (project must be tokenBased)
+        if project.get("publicAccesLevel") == "tokenBased":
+            if user_id in _ids(project.get("tokenAccessReadAndWrite_refs")):
+                return READ_AND_WRITE
+            if user_id in _ids(project.get("tokenAccessReadOnly_refs")):
+                return READ_ONLY
     public = project.get("publicAccesLevel")
     if public == READ_AND_WRITE:
         return READ_AND_WRITE

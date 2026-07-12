@@ -20,6 +20,7 @@ from . import authorization as authz
 from .auth import authenticate
 from .config import WebConfig
 from .passwords import verify_password
+from .projects import ProjectManager, register_project_routes
 from .sessions import SessionStore, generate_session_id, get_logged_in_user_id, serialize_user
 from .users import UserManager
 
@@ -54,9 +55,11 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None) -> FastAP
 
     users = UserManager(db, config.bcrypt_rounds)
     store = SessionStore(redis, config.session_secrets, config.cookie_max_age_s)
+    projects = ProjectManager(db)
     app.state.db = db
     app.state.users = users
     app.state.store = store
+    app.state.projects = projects
     app.state.config = config
 
     async def _session(request: Request):
@@ -145,6 +148,7 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None) -> FastAP
             }
         )
 
+    register_project_routes(app, pm=projects, db=db, store=store, config=config)
     return app
 
 

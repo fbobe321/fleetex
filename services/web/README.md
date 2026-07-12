@@ -24,6 +24,27 @@ frontend) come in subsequent sessions. Default port **3000**.
 This closes the **cookie/session gap** flagged in Phase 6 (real-time): a browser
 that logs in here gets a session the real-time service can read.
 
+## Project CRUD slice (Phase 7b)
+
+- **List** — `POST /api/project` → `{totalSize, projects[]}` with per-user
+  `archived`/`trashed` booleans, `accessLevel`/`source`, owner/lastUpdatedBy
+  injected. Cascading owner→invite→token dedupe; filters (archived/trashed/
+  ownedByUser/sharedWithUser) + sort. `GET /user/projects` → lightweight list.
+- **Create** — `POST /project/new` → builds the project doc + rootFolder tree +
+  `main.tex` doc metadata, returns `{project_id, owner_ref, owner}`.
+- **Rename/settings** — `POST /project/:id/rename` (owner), `.../settings`
+  (compiler/name/lang, write access), `.../settings/admin` (publicAccessLevel, owner).
+- **Archive/trash** — `POST`/`DELETE /project/:id/archive` and `.../trash`
+  (per-user ObjectId arrays; archive⇄trash are mutually exclusive per user).
+- **Delete** — `DELETE /project/:id` (owner) → soft-delete into `deletedProjects`.
+- **Clone** — `POST /project/:id/clone` (read access) → copies the tree with fresh ids.
+
+Name validation matches upstream (≤150 chars, no `/`/`\`, no leading/trailing
+whitespace). **Deviation:** upstream mixes `:Project_id`/`:project_id` casing per
+route; this port normalizes to lowercase `/project/:id` throughout (a fresh
+frontend, not the Node bundle). Doc/file **contents** live in docstore/filestore
+(bridged/deferred) — this slice manages the project document + tree metadata.
+
 ## Deferred / stubbed (documented)
 
 Registration (admin-only upstream; use `UserManager.create_user` here), CSRF
