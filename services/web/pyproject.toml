@@ -12,6 +12,7 @@ license = { text = "AGPL-3.0-only" }
 dependencies = [
     "fleetex-service-kit",
     "bcrypt>=4.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]

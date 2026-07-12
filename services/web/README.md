@@ -67,6 +67,29 @@ HTTP `doc` endpoint is the docstore-backed initial-state loader.
 **Deferred:** filestore binary download (`/file/:id`), spelling dictionary, the
 `otMigrationStage`/history fields (stubbed to 0/[]), anonymous-token editor access.
 
+## File-tree operations slice (Phase 7d)
+
+Mutating editor ops (all `ensureUserCanWriteProjectContent`, all publish an
+`editor-events` message to Redis for live collaborators):
+
+- **`POST /project/:id/doc`** — add doc: creates empty doc in docstore + tree node → `reciveNewDoc`.
+- **`POST /project/:id/folder`** — add folder → `reciveNewFolder`.
+- **`POST /project/:id/:type/:id/rename`** — rename (dup + blocked-name checks) → `reciveEntityRename`.
+- **`POST /project/:id/:type/:id/move`** — move (dup + folder-into-descendant guard) → `reciveEntityMove`.
+- **`DELETE /project/:id/{doc,file,folder}/:id`** — delete (recursive for folders; each doc `delete_doc`'d in docstore; root doc unset) → `removeEntity`.
+- **`POST /project/:id/upload`** — multipart `qqfile` + `name`: text→docstore doc, binary→filestore file (sha256 hash) → `reciveNewDoc`/`reciveNewFile`.
+
+Name rules match SafePath (no `/\*`/control chars, not `.`/`..`, no lead/trail ws,
+blocked reserved names for top-level); `MAX_ENTITIES_PER_PROJECT=2000`, upload cap 50 MB.
+
+**Deviation:** upstream mutates the tree with positional-`$` Mongo updates; this
+port loads → mutates the in-memory tree → saves the whole `rootFolder` + bumps
+`version` (same result; upstream serializes with a project lock anyway).
+**Bridges:** docstore (doc create/delete), filestore (binary — note: this
+storage-only filestore version has no project-file upload route, so binary
+*persistence* is a documented bridge point; the sha256 hash is computed), Redis
+editor-events (consumed by the real-time service).
+
 ## Deferred / stubbed (documented)
 
 Registration (admin-only upstream; use `UserManager.create_user` here), CSRF

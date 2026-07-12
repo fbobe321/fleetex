@@ -126,21 +126,32 @@ real-time. 156 tests, CI green. web + document-updater/OT still Node (bridged).
   - **Deferred:** filestore binary download, spelling, otMigrationStage/history
     (stubbed), anonymous-token editor access.
 
+- **Phase 7d (`web` — file-tree ops slice):** DONE ✅ — `services/web/file_tree.py`.
+  add doc/folder, rename, move, delete, upload — all write-auth, all publish an
+  `editor-events` Redis message (reciveNewDoc/reciveNewFolder/reciveEntityRename/
+  reciveEntityMove/removeEntity/reciveNewFile) consumed by real-time. SafePath name
+  rules, dup + blocked-name + folder-into-descendant guards, 2000-entity cap, 50MB
+  upload. Bridges docstore (doc create/delete), filestore (binary hash). 60 web tests.
+  - **Deviation:** whole-tree save vs positional-$ (same result). Binary filestore
+    *persistence* deferred (storage-only filestore has no project-file route; hash computed).
+
+## Milestone: web is functionally usable ✅
+web now does auth + project CRUD + editor bootstrap + doc bridge + full file-tree
+ops. A user can log in, manage projects, open one, load/edit the file tree.
+8 services, 217 tests, CI green. Still Node: the OT engine (document-updater/
+project-history) + serving the actual frontend bundle.
+
 ## Next session should do
-**Phase 7d — `web`: file tree operations + uploads slice.** The mutating
-editor/file-tree ops. Steps:
-1. Subagent-map ONLY file-tree mutations in `/data3/overleaf/services/web` — add/
-   rename/move/delete doc & folder (`POST /project/:id/doc`, `/folder`,
-   `/project/:id/:entity/:id/rename`, move, delete), and file upload
-   (`POST /project/:id/upload`, bridging filestore — already ported!). Note how
-   these update the projects rootFolder tree + version, and emit real-time events
-   (reciveNewDoc etc via the editor-events channel — real-time is ported too).
-2. Add routes + tree-mutation logic to services/web; bridge filestore for uploads,
-   docstore for new doc contents. mongomock tests.
-3. Update this file; commit.
-Read ONLY this file, ROADMAP.md, and the web file-tree source. Reuse services/web
-+ docstore + filestore + real-time (editor-events publish). Later: serving the
-frontend bundle. Phase 8 (OT core) remains LAST + OPTIONAL.
+**Phase 7e — `web`: serve a minimal frontend / static + wire real-time.** OR jump
+to **Phase 8 (OT core)** — user's call. Options:
+- **7e (frontend glue):** serve a minimal editor HTML that consumes the bootstrap
+  JSON + connects to real-time (socket.io). This makes Fleetex actually openable in
+  a browser end-to-end. Lower-risk, high-visibility.
+- **Phase 8 (OT core, OPTIONAL/HARD):** document-updater + project-history — the
+  collaboration engine. Read ROADMAP §4/§8 FIRST (the hard-core warnings: port OT
+  line-for-line, build a differential fuzzer vs Node, replace LAST). Fine to leave
+  on Node forever.
+Ask the user which direction. Read ONLY this file + ROADMAP before starting either.
 
 ## Services ported (Node → Python)
 _(none yet)_

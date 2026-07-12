@@ -114,6 +114,19 @@ class DocstoreClient:
             return resp.json()
         return None
 
+    async def update_doc(self, project_id: str, doc_id: str, lines: list, version: int = 0, ranges: dict | None = None) -> None:
+        await self.http.post(
+            f"{self.base_url}/project/{project_id}/doc/{doc_id}",
+            json={"lines": lines, "version": version, "ranges": ranges or {}},
+        )
+
+    async def delete_doc(self, project_id: str, doc_id: str, name: str, deleted_at: str) -> None:
+        await self.http.request(
+            "PATCH",
+            f"{self.base_url}/project/{project_id}/doc/{doc_id}",
+            json={"deleted": True, "name": name, "deletedAt": deleted_at},
+        )
+
 
 def register_editor_routes(app: FastAPI, *, pm: ProjectManager, db, store, config, docstore: DocstoreClient) -> None:
     @app.get("/project/{project_id}")
