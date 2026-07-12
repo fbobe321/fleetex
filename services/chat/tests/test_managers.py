@@ -48,6 +48,16 @@ async def test_messages_sorted_desc_with_before_cursor(db):
     assert [m["timestamp"] for m in before] == [200, 100]
 
 
+async def test_get_messages_newest_first_deterministic(db):
+    # explicit distinct timestamps -> deterministic descending order
+    mm = MessageManager(db)
+    room = ObjectId()
+    for content, ts in [("a", 100), ("b", 200), ("c", 300)]:
+        await mm.create_message(room, ObjectId(), content, ts)
+    msgs = await mm.get_messages(room, limit=50)
+    assert [m["content"] for m in msgs] == ["c", "b", "a"]
+
+
 async def test_get_message_missing_raises(db):
     mm = MessageManager(db)
     with pytest.raises(MissingMessageError):

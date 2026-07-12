@@ -23,12 +23,15 @@ async def test_send_global_returns_201_with_room_id(app):
     assert isinstance(r.json["id"], str) and len(r.json["id"]) == 24
 
 
-async def test_global_list_is_newest_first(app):
+async def test_global_list_returns_all_and_strips_room_id(app):
+    # Note: messages posted within the same millisecond share a timestamp, so their
+    # relative order is insertion order (a tie) — same as the Node original's
+    # Date.now(). Deterministic newest-first ordering is covered in test_managers.
     for c in ("first", "second", "third"):
         await call_asgi(app, "POST", f"/project/{PID}/messages", json={"user_id": UID, "content": c})
     r = await call_asgi(app, "GET", f"/project/{PID}/messages")
     assert r.status == 200
-    assert [m["content"] for m in r.json] == ["third", "second", "first"]
+    assert sorted(m["content"] for m in r.json) == ["first", "second", "third"]
     assert all("room_id" not in m for m in r.json)  # stripped from lists
 
 
