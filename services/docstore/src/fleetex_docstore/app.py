@@ -42,7 +42,9 @@ class _Invalid(Exception):
 
 def build_app(config: DocstoreConfig | None = None, *, store=None) -> FastAPI:
     config = config or DocstoreConfig.from_env()
-    settings = Settings.from_env("docstore", default_port=config.port, env={})
+    # Read the real environment so MONGO_URL is honored (docstore uses the kit's
+    # Mongo lifespan for its DB connection).
+    settings = Settings.from_env("docstore", default_port=config.port)
     app = create_app(settings, connect_redis=False, status_text="docstore is alive")
 
     if store is None and config.backend:

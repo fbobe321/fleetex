@@ -21,6 +21,7 @@ from .auth import authenticate
 from .config import WebConfig
 from .editor import DocstoreClient, register_editor_routes
 from .file_tree import EditorEventsPublisher, FilestoreClient, FileTreeManager, register_file_tree_routes
+from .frontend import register_frontend_routes
 from .passwords import verify_password
 from .projects import ProjectManager, register_project_routes
 from .sessions import SessionStore, generate_session_id, get_logged_in_user_id, serialize_user
@@ -160,6 +161,8 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=
     ft = FileTreeManager(db, docstore, filestore, events)
     app.state.file_tree = ft
     register_file_tree_routes(app, pm=projects, db=db, store=store, config=config, ft=ft)
+
+    register_frontend_routes(app, config=config, store=store, users=users)
     return app
 
 

@@ -14,9 +14,10 @@ from __future__ import annotations
 import httpx
 from bson import ObjectId
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
-from .projects import ProjectManager, can_read, load_with_access
+from .frontend import EDITOR_PAGE
+from .projects import ProjectManager, can_read, can_write, load_with_access
 
 
 # --- tree walking -------------------------------------------------------- #
@@ -47,6 +48,21 @@ def list_entities(project: dict) -> list[dict]:
             entities.append({"path": f"{prefix}/{doc['name']}", "type": "doc"})
         for file_ref in folder.get("fileRefs", []):
             entities.append({"path": f"{prefix}/{file_ref['name']}", "type": "file"})
+        for sub in folder.get("folders", []):
+            walk(sub, f"{prefix}/{sub['name']}")
+
+    walk(_root(project), "")
+    return sorted(entities, key=lambda e: e["path"])
+
+
+def list_entities_with_ids(project: dict) -> list[dict]:
+    entities: list[dict] = []
+
+    def walk(folder: dict, prefix: str) -> None:
+        for doc in folder.get("docs", []):
+            entities.append({"id": str(doc["_id"]), "path": f"{prefix}/{doc['name']}", "type": "doc"})
+        for file_ref in folder.get("fileRefs", []):
+            entities.append({"id": str(file_ref["_id"]), "path": f"{prefix}/{file_ref['name']}", "type": "file"})
         for sub in folder.get("folders", []):
             walk(sub, f"{prefix}/{sub['name']}")
 
@@ -131,12 +147,32 @@ class DocstoreClient:
 def register_editor_routes(app: FastAPI, *, pm: ProjectManager, db, store, config, docstore: DocstoreClient) -> None:
     @app.get("/project/{project_id}")
     async def load_editor(project_id: str, request: Request):
+        # Browsers (Accept: text/html) get the editor page; the page's JS then
+        # fetches this same URL with ?format=json for the bootstrap data.
+        wants_html = "text/html" in request.headers.get("accept", "") and request.query_params.get("format") != "json"
+        if wants_html:
+            return HTMLResponse(EDITOR_PAGE)
         loaded, err = await load_with_access(request, project_id, pm=pm, store=store, config=config, check=can_read)
         if err:
             return err
         uid, project = loaded
         user = await db["users"].find_one({"_id": ObjectId(uid)})
         return JSONResponse(build_bootstrap(project, user, uid, config))
+
+    @app.post("/project/{project_id}/doc/{doc_id}")
+    async def save_document(project_id: str, doc_id: str, request: Request):
+        loaded, err = await load_with_access(request, project_id, pm=pm, store=store, config=config, check=can_write)
+        if err:
+            return err
+        _uid, project = loaded
+        if find_doc_pathname(project, doc_id) is None:
+            return Response(status_code=404)
+        body = await request.json()
+        lines = body.get("lines")
+        if lines is None:
+            lines = (body.get("content") or "").split("\n")
+        await docstore.update_doc(project_id, doc_id, lines, body.get("version", 0), body.get("ranges", {}))
+        return JSONResponse({"saved": True})
 
     @app.get("/project/{project_id}/entities")
     async def project_entities(project_id: str, request: Request):
@@ -145,6 +181,15 @@ def register_editor_routes(app: FastAPI, *, pm: ProjectManager, db, store, confi
             return err
         _uid, project = loaded
         return JSONResponse({"project_id": project_id, "entities": list_entities(project)})
+
+    @app.get("/project/{project_id}/tree")
+    async def project_tree(project_id: str, request: Request):
+        # Like /entities but includes entity ids — used by the Fleetex frontend.
+        loaded, err = await load_with_access(request, project_id, pm=pm, store=store, config=config, check=can_read)
+        if err:
+            return err
+        _uid, project = loaded
+        return JSONResponse({"project_id": project_id, "entities": list_entities_with_ids(project)})
 
     @app.get("/project/{project_id}/doc/{doc_id}")
     async def get_document(project_id: str, doc_id: str, request: Request):

@@ -141,17 +141,42 @@ ops. A user can log in, manage projects, open one, load/edit the file tree.
 8 services, 217 tests, CI green. Still Node: the OT engine (document-updater/
 project-history) + serving the actual frontend bundle.
 
+- **Phase 7e (`web` — minimal frontend, browser-openable):** DONE ✅ —
+  `services/web/frontend.py` + editor.py additions. Self-contained vanilla-JS
+  pages (login/register/dashboard/editor, no build/CDN). Added: open registration
+  (`POST /register`, config-gated), doc-save (`POST /project/:id/doc/:doc_id`
+  bridging docstore), `/project/:id/tree` (entities+ids), content-negotiation on
+  `GET /project/:id` (HTML for browsers, JSON for `?format=json`). 69 web tests.
+  - **VERIFIED END-TO-END against real Mongo+Redis (docker):** browser flow
+    register→create→open→**edit→save→read-back**→add-file, content confirmed
+    persisted in Mongo's `docs` collection via web→docstore bridge. First real
+    multi-service run of the Python stack.
+  - **Fixed a real config bug:** docstore passed `env={}` to the kit Settings so it
+    ignored `MONGO_URL` (always used compose default `mongo:27017`). Now reads real
+    env. (Other services were unaffected — they manage their own conn or use no DB.)
+  - **Single-user editing over HTTP.** Live multi-user OT needs Phase 8.
+
+## How to run the stack (verified)
+`docker run mongo:8.0` + `redis:6.2`, then
+`MONGO_URL=... python -m fleetex_docstore` (:3016) and
+`MONGO_URL=... REDIS_URL=... DOCSTORE_URL=http://localhost:3016 SESSION_SECRET=... python -m fleetex_web` (:3000).
+Open http://localhost:3000 → register → create/open a project.
+
 ## Next session should do
-**Phase 7e — `web`: serve a minimal frontend / static + wire real-time.** OR jump
-to **Phase 8 (OT core)** — user's call. Options:
-- **7e (frontend glue):** serve a minimal editor HTML that consumes the bootstrap
-  JSON + connects to real-time (socket.io). This makes Fleetex actually openable in
-  a browser end-to-end. Lower-risk, high-visibility.
-- **Phase 8 (OT core, OPTIONAL/HARD):** document-updater + project-history — the
-  collaboration engine. Read ROADMAP §4/§8 FIRST (the hard-core warnings: port OT
-  line-for-line, build a differential fuzzer vs Node, replace LAST). Fine to leave
-  on Node forever.
-Ask the user which direction. Read ONLY this file + ROADMAP before starting either.
+Fleetex is now browser-openable for single-user editing. Two directions left
+(user's call — ask):
+- **Phase 8 (OT core, the big optional one):** `document-updater` (+ project-history)
+  — the real-time collaboration engine, so multiple users edit live. HARD. Read
+  ROADMAP §4/§8 FIRST: port the OT algorithms line-for-line, build a differential
+  fuzzer (random op sequences applied to both Node and Python engines, assert
+  identical converged state) BEFORE trusting it, replace LAST. Fine to leave on
+  Node forever — a "mostly-Python Overleaf" is a valid end state.
+- **Polish/glue (lower-risk):** wire the frontend editor to real-time socket.io for
+  presence/live file-tree events; add a compile button (clsi is ported); a
+  docker-compose that runs the whole Python stack; filestore project-file upload
+  route (close the binary-persistence gap). Any of these makes the demo richer
+  without the OT risk.
+Read ONLY this file + ROADMAP before starting either.
 
 ## Services ported (Node → Python)
 _(none yet)_

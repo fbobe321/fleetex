@@ -26,6 +26,8 @@ class WebConfig:
     max_doc_length: int = 2 * 1024 * 1024
     default_compiler: str = "pdflatex"
     languages: list = field(default_factory=lambda: ["en", "fr", "de", "es"])
+    # Fleetex convenience: open self-registration (CE = all-trusted-users model).
+    open_registration: bool = True
 
     @property
     def cookie_max_age_s(self) -> int:
@@ -51,4 +53,5 @@ class WebConfig:
             docstore_url=env.get("DOCSTORE_URL", "http://docstore:3016"),
             ws_url=env.get("WEBSOCKET_URL", "/socket.io"),
             ws_retry_handshake=int(env.get("WEBSOCKET_RETRY_HANDSHAKE", 5)),
+            open_registration=env.get("OPEN_REGISTRATION", "true").lower() in ("1", "true", "yes"),
         )
