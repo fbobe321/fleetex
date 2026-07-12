@@ -48,6 +48,20 @@
     backends = in-memory (tests) + fs; **S3/GCS deferred to the persistor port**.
   - Kit gained `Response.headers` in the contract harness (for x-doc-status).
 
+- **Phase 5 (`clsi`):** DONE ✅ — `services/clsi` (`fleetex-clsi`). LaTeX compiler
+  orchestration, no Mongo/Redis. Ports: RequestParser, ResourceWriter (+extraneous
+  cleanup + .project-sync-state), compile/output dir layout, **latexmk argv build**,
+  OutputFileFinder + build-dir caching (generated-files/<buildId>/, output.pdf size),
+  compile-response assembly (status enum, outputFiles url), synctex + texcount
+  **parsers**, LockManager (423/503). Routes: compile (+user), stop, clear,
+  sync/code, sync/pdf, wordcount, status. 24 tests, boots under uvicorn.
+  - **The command runner is INJECTABLE** — `LocalCommandRunner` shells out to real
+    latexmk/synctex/texcount (Dockerfile installs TeX Live); tests inject a fake
+    toolchain so the whole flow is exercised end-to-end. Runner plumbing itself is
+    verified with a real subprocess; only the **TeX binaries** are unverified (none
+    in CI). **Deferred:** URL resources (need filestore UrlCache), docker sandboxed
+    compiles, PDF caching, output-zip.
+
 ## Testing note
 Each service is its own package with its own pytest config. Run per-service
 (`cd services/<name> && pytest`) or all at once via `bash services/test-all.sh`.
@@ -55,21 +69,22 @@ Do NOT `pytest services/...` from the repo root — the launcher's root config
 shadows the per-service `asyncio_mode` and async tests misfire.
 
 ## Next session should do
-**Phase 5 — `clsi` (★★★).** The LaTeX compiler orchestration — high-value and
-isolated, but new territory (shells out to a TeX distribution, manages compile
-dirs + output files). Steps:
-1. Subagent-map `/data3/overleaf/services/clsi` — the compile request/response
-   API (POST compile with resources, sync/word-count, output file serving), how
-   it runs latexmk/pdflatex, the compile+output directory layout, caching, and
-   whether it uses Mongo/Redis. Note the request/response JSON shapes exactly.
-2. Create `services/clsi/`; implement the compile orchestration (shelling to a
-   TeX engine — likely UNVERIFIED in CI without a TeX install, like filestore's
-   conversions; structure it so the request handling/dir management IS testable).
-3. Tests: request parsing, dir layout, output-file listing/serving; mark the
-   actual-compile path as needs-TeX. Update this file; commit.
-Read ONLY this file, ROADMAP.md, and the clsi source. Note: clsi is bigger
-(~7.9k LOC) — expect this to possibly need 2 sessions; if so, split at
-"request/dir handling" (session A) vs "compile+output serving" (session B).
+**Phase 6 — `real-time` (★★★★).** The websocket layer — HARDER (stateful,
+socket.io protocol, Redis pub/sub). This is where the client editor connects.
+Steps:
+1. Subagent-map `/data3/overleaf/services/real-time` — the socket.io events the
+   frontend emits/expects (joinProject, joinDoc, applyOtUpdate, leaveDoc, etc.),
+   the Redis pub/sub channels bridging to document-updater, session/auth handshake,
+   and the HTTP surface (/status, health). Note exact event names + payloads.
+2. Create `services/real-time/`; implement a `python-socketio` (ASGI) server
+   matching the frontend's events. Redis via redis-py (kit already provides it).
+   document-updater is still Node at this point — bridge to it via Redis.
+3. Tests: socket.io connection + event round-trips (python-socketio has a test
+   client); Redis interactions (fakeredis). Update this file; commit.
+Read ONLY this file, ROADMAP.md, and the real-time source. NOTE: real-time needs
+`python-socketio` (new dep) — the kit's create_app is HTTP-only, so this service
+mounts a socket.io ASGI app alongside. Likely needs care; may split into
+"connection/handshake" vs "doc events" if large.
 
 ## Services ported (Node → Python)
 _(none yet)_
