@@ -1,0 +1,88 @@
+"""HTTP layer — port of HttpController.js (the routes web/real-time call)."""
+
+from __future__ import annotations
+
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
+from fleetex_service_kit import Settings, create_app
+from redis import asyncio as aioredis
+
+from .config import DocUpdaterConfig
+from .errors import DocUpdaterError, OpRangeNotAvailableError
+from .persistence import PersistenceManager
+from .redis_manager import DOC_OPS_TTL, RedisManager
+from .update_manager import AppliedOpsPublisher, DocumentUpdater
+
+
+def build_app(config: DocUpdaterConfig | None = None, *, redis=None, persistence=None) -> FastAPI:
+    config = config or DocUpdaterConfig.from_env()
+    settings = Settings.from_env("document-updater", default_port=config.port, env={})
+    app = create_app(settings, connect_mongo=False, connect_redis=False, status_text="document-updater is alive")
+
+    redis = redis if redis is not None else aioredis.from_url(config.redis_url, decode_responses=True)
+    persistence = persistence or PersistenceManager(config.docstore_url)
+    rm = RedisManager(redis)
+    updater = DocumentUpdater(rm, persistence, AppliedOpsPublisher(redis), config.max_age_of_op)
+    app.state.config = config
+    app.state.redis = redis
+    app.state.rm = rm
+    app.state.updater = updater
+
+    @app.get("/project/{project_id}/doc/{doc_id}")
+    async def get_doc(project_id: str, doc_id: str, request: Request):
+        from_version = int(request.query_params.get("fromVersion", -1))
+        try:
+            doc = await updater.get_doc(project_id, doc_id)
+        except DocUpdaterError:
+            return Response(status_code=404)
+        ops = []
+        if from_version != -1:
+            try:
+                ops = await rm.get_previous_doc_ops(doc_id, from_version, doc["version"])
+            except OpRangeNotAvailableError:
+                return JSONResponse({"firstVersionInRedis": None}, status_code=422)
+        return JSONResponse({
+            "id": doc_id,
+            "lines": doc["lines"],
+            "version": doc["version"],
+            "ops": ops,
+            "ranges": doc.get("ranges") or {},
+            "pathname": doc.get("pathname", ""),
+            "ttlInS": DOC_OPS_TTL,
+            "type": "sharejs-text-ot",
+        })
+
+    @app.post("/project/{project_id}/doc/{doc_id}")
+    async def set_doc(project_id: str, doc_id: str, request: Request):
+        body = await request.json()
+        lines = body.get("lines")
+        if not isinstance(lines, list):
+            return Response(status_code=400)
+        await updater.set_doc(project_id, doc_id, lines, body.get("ranges"))
+        return Response(status_code=204)
+
+    @app.post("/project/{project_id}/doc/{doc_id}/flush")
+    async def flush_doc(project_id: str, doc_id: str):
+        doc = await rm.get_doc(project_id, doc_id)
+        if doc is not None:
+            await persistence.set_doc(project_id, doc_id, doc["lines"], doc["version"], doc.get("ranges") or {})
+        return Response(status_code=204)
+
+    @app.delete("/project/{project_id}/doc/{doc_id}")
+    async def delete_doc(project_id: str, doc_id: str):
+        await updater.flush_and_delete_doc(project_id, doc_id)
+        return Response(status_code=204)
+
+    @app.delete("/project/{project_id}")
+    async def delete_project(project_id: str):
+        await updater.flush_and_delete_project(project_id)
+        return Response(status_code=204)
+
+    @app.get("/health_check")
+    async def health_check():
+        return Response(status_code=200)
+
+    return app
+
+
+app = build_app()

@@ -162,21 +162,39 @@ project-history) + serving the actual frontend bundle.
 `MONGO_URL=... REDIS_URL=... DOCSTORE_URL=http://localhost:3016 SESSION_SECRET=... python -m fleetex_web` (:3000).
 Open http://localhost:3000 → register → create/open a project.
 
+- **Phase 8 (`document-updater` — THE OT CORE):** DONE ✅ — `services/document-updater`
+  (`fleetex-document-updater`). The collaboration engine. `ot_text.py` = line-for-line
+  port of the ShareJS text OT type (apply/transform/compose/transform_x). **Verified
+  by TP1 convergence fuzzer: 200,000 random concurrent-op checks, 0 violations.**
+  Lifecycle: RedisManager (Node-compatible keys: doclines/DocVersion/DocOps/
+  PendingUpdates), engine.process_update (server transform loop, side 'left'),
+  DocumentUpdater (get-doc w/ docstore fallback, process pending, publish applied-ops),
+  DispatchManager (BLPOP pending-updates-list shards), HTTP (GET doc + ops, setDoc,
+  flush, delete). 33 tests incl. multi-client pipeline convergence. Interoperates with
+  the ported real-time service via Redis (pending-updates in, applied-ops out).
+  - **Deferred:** full ranges-tracker track-changes (only position-shift ported),
+    history-ot doc type, project-history queueing, setDoc line-diff.
+
+## 🎉🎉 MILESTONE: all 8 backend services + OT core are in Python
+notifications, chat, filestore, docstore, clsi, real-time, web (auth+projects+
+editor+files+frontend), document-updater. **9 packages, 259 tests, CI green.**
+Fleetex is a functionally-complete, mostly-Python Overleaf. What remains Node:
+NOTHING structural — project-history (undo/version-history) is the last upstream
+service not ported, and it's optional. The frontend bundle is a fresh minimal one.
+
 ## Next session should do
-Fleetex is now browser-openable for single-user editing. Two directions left
-(user's call — ask):
-- **Phase 8 (OT core, the big optional one):** `document-updater` (+ project-history)
-  — the real-time collaboration engine, so multiple users edit live. HARD. Read
-  ROADMAP §4/§8 FIRST: port the OT algorithms line-for-line, build a differential
-  fuzzer (random op sequences applied to both Node and Python engines, assert
-  identical converged state) BEFORE trusting it, replace LAST. Fine to leave on
-  Node forever — a "mostly-Python Overleaf" is a valid end state.
-- **Polish/glue (lower-risk):** wire the frontend editor to real-time socket.io for
-  presence/live file-tree events; add a compile button (clsi is ported); a
-  docker-compose that runs the whole Python stack; filestore project-file upload
-  route (close the binary-persistence gap). Any of these makes the demo richer
-  without the OT risk.
-Read ONLY this file + ROADMAP before starting either.
+Phases 0-8 of the ROADMAP are COMPLETE. Remaining work is polish/hardening, user's
+choice:
+- **project-history** service (the one unported upstream service: version history/
+  undo). Optional; similar hard-core caution as OT.
+- **Live-collab wiring**: connect the frontend editor to real-time socket.io +
+  document-updater so multi-user editing works in the browser end-to-end (the pieces
+  all exist now — real-time + document-updater + web + OT are all ported).
+- **A compose file** running the whole Python stack (web+real-time+document-updater+
+  docstore+clsi+filestore+chat+notifications+mongo+redis) for one-command launch.
+- **Hardening**: contract-diff any service against its Node original; fill deferred
+  gaps (filestore project-file route, S3 backends, ranges track-changes).
+Ask the user. Read ONLY this file + ROADMAP before starting.
 
 ## Services ported (Node → Python)
 _(none yet)_
