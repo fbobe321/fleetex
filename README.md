@@ -22,6 +22,28 @@ pull from. Your users only need a web browser.
 
 ---
 
+## 🐍 The Fleetex Python stack (a from-scratch reimplementation)
+
+This repo also contains a **ground-up Python reimplementation** of Overleaf's
+backend services under [`services/`](services/) — see [`ROADMAP.md`](ROADMAP.md)
+and [`PROGRESS.md`](PROGRESS.md). Nine services (auth/projects/editor **web**,
+**real-time** websockets, **document-updater** OT engine, docstore, filestore,
+clsi, chat, notifications) plus a minimal browser frontend with **live
+collaborative editing**. The OT engine is TP1-fuzz-verified and its browser twin
+is byte-checked against it.
+
+**Run the entire Python stack with one command:**
+
+```bash
+docker compose up --build
+```
+
+Then open **http://localhost:3000** → register → create/open a project. Open a
+second browser tab (or share with someone) editing the same document — changes
+sync live. (Ports published to the host: `3000` web, `3026` real-time websocket.)
+
+---
+
 ## Why this exists
 
 You want an Overleaf alternative for work that:

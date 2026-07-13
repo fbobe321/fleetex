@@ -1,0 +1,119 @@
+# Fleetex — the whole Python stack, one command:
+#
+#     docker compose up --build
+#
+# Then open http://localhost:3000 → register → create/open a project.
+# Multiple browser tabs (or people) editing the same doc sync live.
+#
+# Services talk to each other over the compose network by service name; only web
+# (3000) and real-time (3026, the browser websocket) are published to the host.
+# All Dockerfiles build from the repo root (they COPY services/_kit + the service).
+name: fleetex
+
+x-build: &repo-root
+  context: .
+
+services:
+  mongo:
+    image: mongo:8.0
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ping:1}).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:6.2
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  docstore:
+    build: {<<: *repo-root, dockerfile: services/docstore/Dockerfile}
+    environment:
+      MONGO_URL: mongodb://mongo:27017/sharelatex
+    depends_on:
+      mongo: {condition: service_healthy}
+
+  filestore:
+    build: {<<: *repo-root, dockerfile: services/filestore/Dockerfile}
+    environment:
+      BACKEND: fs
+      FILESTORE_PATH: /var/lib/overleaf/data/filestore
+    volumes:
+      - filestore_data:/var/lib/overleaf/data/filestore
+
+  clsi:
+    build: {<<: *repo-root, dockerfile: services/clsi/Dockerfile}
+    volumes:
+      - clsi_data:/app/clsi_data
+
+  chat:
+    build: {<<: *repo-root, dockerfile: services/chat/Dockerfile}
+    environment:
+      MONGO_URL: mongodb://mongo:27017/sharelatex
+    depends_on:
+      mongo: {condition: service_healthy}
+
+  notifications:
+    build: {<<: *repo-root, dockerfile: services/notifications/Dockerfile}
+    environment:
+      MONGO_URL: mongodb://mongo:27017/sharelatex
+    depends_on:
+      mongo: {condition: service_healthy}
+
+  document-updater:
+    build: {<<: *repo-root, dockerfile: services/document-updater/Dockerfile}
+    environment:
+      REDIS_URL: redis://redis:6379
+      DOCSTORE_URL: http://docstore:3016
+    depends_on:
+      redis: {condition: service_healthy}
+      docstore: {condition: service_started}
+
+  web:
+    build: {<<: *repo-root, dockerfile: services/web/Dockerfile}
+    environment:
+      MONGO_URL: mongodb://mongo:27017/sharelatex
+      REDIS_URL: redis://redis:6379
+      DOCSTORE_URL: http://docstore:3016
+      SESSION_SECRET: fleetex-dev-secret-change-me
+      OPEN_REGISTRATION: "true"
+      # The browser connects to real-time directly, so this is a HOST-reachable URL:
+      WEBSOCKET_URL: http://localhost:3026
+      WEB_API_USER: overleaf
+      WEB_API_PASSWORD: password
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongo: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      docstore: {condition: service_started}
+
+  real-time:
+    build: {<<: *repo-root, dockerfile: services/real-time/Dockerfile}
+    environment:
+      REDIS_URL: redis://redis:6379
+      WEB_HOST: web
+      WEB_PORT: "3000"
+      DOCUMENT_UPDATER_HOST: document-updater
+      WEB_API_USER: overleaf
+      WEB_API_PASSWORD: password
+    ports:
+      - "3026:3026"
+    depends_on:
+      redis: {condition: service_healthy}
+      web: {condition: service_started}
+      document-updater: {condition: service_started}
+
+volumes:
+  mongo_data:
+  redis_data:
+  filestore_data:
+  clsi_data:

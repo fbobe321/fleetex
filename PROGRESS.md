@@ -202,8 +202,16 @@ missing server piece: **real-time now subscribes to `applied-ops`/`editor-events
 - **Demo run:** see "How to run the stack" above + set WEBSOCKET_URL=http://<rt-host>:3026
   for web, and run real-time (:3026) + document-updater (:3003) too.
 
+## One-command launch ✅
+`docker-compose.yml` at repo root runs the whole Python stack: `docker compose up
+--build` → mongo + redis + all 9 services on the compose network (only web:3000 and
+real-time:3026 published to host; browser WEBSOCKET_URL=http://localhost:3026).
+**Verified:** built + ran the core stack via compose, live-collab converged through
+it; all 9 services build+start (clsi's TeX Live layer is heavy but valid). Added the
+missing document-updater Dockerfile.
+
 ## Next session should do
-Phases 0-8 of the ROADMAP are COMPLETE + live-collab wired. Remaining work is polish/hardening, user's
+Phases 0-8 of the ROADMAP are COMPLETE + live-collab wired + one-command compose. Remaining work is polish/hardening, user's
 choice:
 - **project-history** service (the one unported upstream service: version history/
   undo). Optional; similar hard-core caution as OT.
