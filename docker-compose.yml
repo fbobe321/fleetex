@@ -73,9 +73,19 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       DOCSTORE_URL: http://docstore:3016
+      # checkpoint a version to project-history on every flush
+      PROJECT_HISTORY_URL: http://project-history:3054
     depends_on:
       redis: {condition: service_healthy}
       docstore: {condition: service_started}
+
+  project-history:
+    build: {<<: *repo-root, dockerfile: services/project-history/Dockerfile}
+    environment:
+      MONGO_URL: mongodb://mongo:27017/sharelatex
+      DOCUMENT_UPDATER_URL: http://document-updater:3003
+    depends_on:
+      mongo: {condition: service_healthy}
 
   web:
     build: {<<: *repo-root, dockerfile: services/web/Dockerfile}

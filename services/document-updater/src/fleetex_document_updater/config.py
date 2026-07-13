@@ -14,6 +14,7 @@ class DocUpdaterConfig:
     dispatcher_count: int = 10  # also the pending-updates-list shard count
     max_doc_length: int = 2 * 1024 * 1024
     max_age_of_op: int = 80
+    project_history_url: str | None = None  # if set, snapshot to project-history on flush
 
     @classmethod
     def from_env(cls, env: dict | None = None) -> "DocUpdaterConfig":
@@ -24,4 +25,5 @@ class DocUpdaterConfig:
             redis_url=env.get("REDIS_URL", f"redis://{host}:{env.get('REDIS_PORT', '6379')}"),
             docstore_url=env.get("DOCSTORE_URL", "http://docstore:3016"),
             dispatcher_count=int(env.get("DISPATCHER_COUNT", 10)),
+            project_history_url=env.get("PROJECT_HISTORY_URL") or None,
         )

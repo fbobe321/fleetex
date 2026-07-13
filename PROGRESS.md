@@ -246,6 +246,45 @@ Share button. Registered BEFORE file-tree routes so /members/:id isn't shadowed 
 the /{entity_type}/:id catch-all. **VERIFIED in compose:** Alice shares -> Bob (a
 different user) sees it in his dashboard (readWrite/invite) and can open it.
 
+## Editor upgrade ✅
+`frontend.py` editor page: LaTeX syntax highlighting (a `<pre class=hl>` layer
+behind a transparent-text textarea — commands/%comments/{braces} colored,
+HTML-escaped first so content can't inject markup), line-number gutter with
+synced scroll, Tab→2 spaces, PDF download link on successful compile. The
+verified OT/textarea binding is untouched — `updateView()` only reads `ed.value`
+to render the overlay. collab.js OT engine unchanged. Highlighting logic
+node-tested; JS syntax `node --check`ed.
+
+## Security hardening ✅ (3 fronts)
+- **real-time socket auth**: the client used to hand real-time its own `user_id`
+  in the socket.io auth payload — any socket could impersonate any account. Now
+  `session_auth.py` reads the signed `overleaf.sid` cookie off the WebSocket
+  handshake, verifies it with the shared `SESSION_SECRET`, loads `sess:<sid>`
+  from the shared Redis, and takes the id from `passport.user._id`; client
+  `user_id` is ignored. **Verified:** a web-minted cookie resolves in real-time;
+  a tampered one is rejected. compose shares SESSION_SECRET/COOKIE_NAME.
+- **web CSRF**: `security.py` Origin-guard middleware — unsafe methods carrying a
+  foreign browser Origin get 403; no-Origin requests (curl, tests, real-time's
+  Basic-auth `/join`) pass. Atop the existing SameSite=Lax cookies.
+- **clsi compile sandbox**: client `flags` flowed straight into the latexmk argv
+  (a caller could pass `-shell-escape` → RCE). Now flags are validated
+  (shell-escape/write18/output-directory/jobname/... rejected) and every compile
+  runs with a locked-down TeX env (`shell_escape=f`, `openin_any=p`,
+  `openout_any=p`).
+
+## project-history service ✅ (NEW — the last unported upstream service)
+`services/project-history` (`fleetex-project-history`, port 3054). Document
+**version history**: snapshot-at-save-point versions in Mongo (`history_versions`),
+per-project monotonic version numbers, consecutive-identical dedup. API: record
+snapshot, project/doc timeline, full-version content, segment diff (`{u|i|d}`) +
+unified diff, and **restore** (pushes a past version back into the live doc via
+document-updater setDoc). `diff.py` = token-level exact diff. document-updater
+checkpoints a version here on every flush (best-effort `HistoryClient`, gated on
+`PROJECT_HISTORY_URL`; absent by default so it never breaks editing). Wired into
+compose. **21 service tests + 2 document-updater hook tests. Verified on real
+Mongo:** timeline/dedup/pathname-carry/diff/restore/scoped-purge, and the
+document-updater→project-history HTTP contract end-to-end.
+
 ## Next session should do
 Phases 0-8 COMPLETE + live-collab + compose + compile + presence. Remaining work is polish/hardening, user's
 choice:
@@ -265,16 +304,16 @@ _(none yet)_
 
 | Service | Status | Version flipped | Notes |
 |---------|--------|-----------------|-------|
-| notifications | not started | – | |
-| chat | not started | – | |
-| filestore | not started | – | |
-| docstore | not started | – | |
-| clsi | not started | – | |
-| real-time | not started | – | |
-| web (backend) | not started | – | |
-| document-updater | not started | – | hard core — do last |
-| project-history | not started | – | hard core — do last |
-| history-v1 | not started | – | hard core — do last |
+| notifications | DONE ✅ | Python | |
+| chat | DONE ✅ | Python | |
+| filestore | DONE ✅ | Python | + project-file store (images) |
+| docstore | DONE ✅ | Python | |
+| clsi | DONE ✅ | Python | sandboxed (flag validation + locked TeX env) |
+| real-time | DONE ✅ | Python | socket handshake cookie-authenticated |
+| web (backend) | DONE ✅ | Python | auth+projects+editor+files+frontend+sharing+compile+CSRF |
+| document-updater | DONE ✅ | Python | OT core; TP1-fuzzed; flush→history hook |
+| project-history | DONE ✅ | Python | snapshot versions + diff + restore (port 3054) |
+| history-v1 | n/a | – | folded into project-history (snapshot model) |
 
 ## Gotchas / decisions log
 - Frontend stays JS/TS (React); we reuse Overleaf's. Only backends go to Python.

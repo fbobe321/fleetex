@@ -70,3 +70,29 @@ async def test_set_doc_and_delete(app, redis):
     delr = await call_asgi(app, "DELETE", f"/project/{PID}/doc/{DID}")
     assert delr.status == 204
     assert await RedisManager(redis).get_doc(PID, DID) is None
+
+
+class _RecordingHistory:
+    def __init__(self):
+        self.snapshots = []
+
+    async def snapshot(self, project_id, doc_id, lines, pathname="", source="flush"):
+        self.snapshots.append({"project_id": project_id, "doc_id": doc_id, "lines": lines, "pathname": pathname, "source": source})
+
+
+async def test_flush_snapshots_to_history_when_configured(redis):
+    history = _RecordingHistory()
+    persistence = FakePersistence()
+    app = build_app(DocUpdaterConfig(), redis=redis, persistence=persistence, history=history)
+    await RedisManager(redis).put_doc_in_memory(PID, DID, ["hello", "world"], 3, {}, "main.tex")
+    r = await call_asgi(app, "POST", f"/project/{PID}/doc/{DID}/flush")
+    assert r.status == 204
+    assert history.snapshots == [{"project_id": PID, "doc_id": DID, "lines": ["hello", "world"], "pathname": "main.tex", "source": "flush"}]
+
+
+async def test_history_hook_absent_by_default(app, redis):
+    # no PROJECT_HISTORY_URL -> app.state.history is None, flush still works
+    await RedisManager(redis).put_doc_in_memory(PID, DID, ["x"], 1, {}, "m")
+    assert app.state.history is None
+    r = await call_asgi(app, "POST", f"/project/{PID}/doc/{DID}/flush")
+    assert r.status == 204

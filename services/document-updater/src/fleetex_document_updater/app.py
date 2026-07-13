@@ -9,12 +9,13 @@ from redis import asyncio as aioredis
 
 from .config import DocUpdaterConfig
 from .errors import DocUpdaterError, OpRangeNotAvailableError
+from .history_client import HistoryClient
 from .persistence import PersistenceManager
 from .redis_manager import DOC_OPS_TTL, RedisManager
 from .update_manager import AppliedOpsPublisher, DocumentUpdater
 
 
-def build_app(config: DocUpdaterConfig | None = None, *, redis=None, persistence=None, with_workers: bool = False) -> FastAPI:
+def build_app(config: DocUpdaterConfig | None = None, *, redis=None, persistence=None, history=None, with_workers: bool = False) -> FastAPI:
     config = config or DocUpdaterConfig.from_env()
 
     async def _start_workers(app):
@@ -36,10 +37,17 @@ def build_app(config: DocUpdaterConfig | None = None, *, redis=None, persistence
     persistence = persistence or PersistenceManager(config.docstore_url)
     rm = RedisManager(redis)
     updater = DocumentUpdater(rm, persistence, AppliedOpsPublisher(redis), config.max_age_of_op)
+    if history is None and config.project_history_url:
+        history = HistoryClient(config.project_history_url)
     app.state.config = config
     app.state.redis = redis
     app.state.rm = rm
     app.state.updater = updater
+    app.state.history = history
+
+    async def _snapshot_history(project_id, doc_id, doc) -> None:
+        if history is not None and doc is not None:
+            await history.snapshot(project_id, doc_id, doc["lines"], doc.get("pathname", ""))
 
     @app.get("/project/{project_id}/doc/{doc_id}")
     async def get_doc(project_id: str, doc_id: str, request: Request):
@@ -79,10 +87,13 @@ def build_app(config: DocUpdaterConfig | None = None, *, redis=None, persistence
         doc = await rm.get_doc(project_id, doc_id)
         if doc is not None:
             await persistence.set_doc(project_id, doc_id, doc["lines"], doc["version"], doc.get("ranges") or {})
+            await _snapshot_history(project_id, doc_id, doc)
         return Response(status_code=204)
 
     @app.delete("/project/{project_id}/doc/{doc_id}")
     async def delete_doc(project_id: str, doc_id: str):
+        doc = await rm.get_doc(project_id, doc_id)
+        await _snapshot_history(project_id, doc_id, doc)
         await updater.flush_and_delete_doc(project_id, doc_id)
         return Response(status_code=204)
 
