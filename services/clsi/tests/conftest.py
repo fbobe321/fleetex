@@ -18,9 +18,11 @@ class FakeToolchain(CommandRunner):
     def __init__(self, produce_pdf: bool = True) -> None:
         self.produce_pdf = produce_pdf
         self.calls: list = []
+        self.envs: list = []
 
     def run(self, command, cwd, timeout, env=None):
         self.calls.append(command)
+        self.envs.append(env)
         tool = command[0]
         if tool == "latexmk":
             open(os.path.join(cwd, "output.log"), "w").write("log")

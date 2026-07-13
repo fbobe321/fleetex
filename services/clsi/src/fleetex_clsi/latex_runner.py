@@ -23,6 +23,19 @@ COMPILER_FLAGS = {
 _REWRITE_TO_TEX = (".Rtex", ".md", ".Rmd", ".Rnw")
 
 
+def sandbox_env() -> dict:
+    """TeX security knobs, honoured by all TeX Live engines (they override
+    texmf.cnf when set in the environment):
+
+    - ``shell_escape=f``  — disable ``\\write18`` shell execution entirely.
+    - ``openin_any=p``    — paranoid: refuse to read dotfiles / absolute / parent paths.
+    - ``openout_any=p``   — paranoid: refuse to write outside the compile tree.
+
+    This is the last line of defence should a compile run outside a container.
+    """
+    return {"shell_escape": "f", "openin_any": "p", "openout_any": "p"}
+
+
 def main_tex_file(root_resource_path: str) -> str:
     base, ext = os.path.splitext(root_resource_path)
     if ext in _REWRITE_TO_TEX:

@@ -31,6 +31,9 @@ class WebConfig:
     languages: list = field(default_factory=lambda: ["en", "fr", "de", "es"])
     # Fleetex convenience: open self-registration (CE = all-trusted-users model).
     open_registration: bool = True
+    # Extra origins (scheme://host[:port]) allowed for state-changing requests,
+    # beyond the site's own host. Same-origin is always allowed.
+    allowed_origins: list = field(default_factory=list)
 
     @property
     def cookie_max_age_s(self) -> int:
@@ -60,4 +63,5 @@ class WebConfig:
             ws_url=env.get("WEBSOCKET_URL", "/socket.io"),
             ws_retry_handshake=int(env.get("WEBSOCKET_RETRY_HANDSHAKE", 5)),
             open_registration=env.get("OPEN_REGISTRATION", "true").lower() in ("1", "true", "yes"),
+            allowed_origins=[o.strip() for o in env.get("ALLOWED_ORIGINS", "").split(",") if o.strip()],
         )

@@ -105,6 +105,10 @@ services:
       DOCUMENT_UPDATER_HOST: document-updater
       WEB_API_USER: overleaf
       WEB_API_PASSWORD: password
+      # MUST match web's SESSION_SECRET/COOKIE_NAME: real-time verifies the
+      # signed session cookie off the socket handshake to authenticate the user.
+      SESSION_SECRET: fleetex-dev-secret-change-me
+      COOKIE_NAME: overleaf.sid
     ports:
       - "3026:3026"
     depends_on:

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from .config import ClsiConfig
 from .errors import NotFoundError
-from .latex_runner import CommandRunner, LocalCommandRunner, build_latex_command, main_tex_file
+from .latex_runner import CommandRunner, LocalCommandRunner, build_latex_command, main_tex_file, sandbox_env
 from .lock_manager import LockManager
 from .output_files import find_output_files, generate_build_id, save_output_files
 from .parsers import parse_edit_output, parse_view_output, parse_wordcount
@@ -68,7 +68,7 @@ class CompileManager:
 
             main = main_tex_file(parsed.root_resource_path)
             command = build_latex_command(main, cdir, parsed)
-            run = self.runner.run(command, cwd=cdir, timeout=parsed.timeout_ms / 1000)
+            run = self.runner.run(command, cwd=cdir, timeout=parsed.timeout_ms / 1000, env=sandbox_env())
             t_compile = time.time()
 
             files = find_output_files(cdir, {r.path for r in resources})
@@ -128,7 +128,7 @@ class CompileManager:
         self._require_synctex(cdir)
         input_path = os.path.join(cdir, file)
         command = ["synctex", "view", "-i", f"{line}:{column}:{input_path}", "-o", os.path.join(cdir, "output.pdf")]
-        run = self.runner.run(command, cwd=cdir, timeout=60)
+        run = self.runner.run(command, cwd=cdir, timeout=60, env=sandbox_env())
         return parse_view_output(run.stdout)
 
     def synctex_from_pdf(self, project_id, user_id, page, h, v) -> list[dict]:
@@ -136,12 +136,12 @@ class CompileManager:
         cdir = self.compile_dir(name)
         self._require_synctex(cdir)
         command = ["synctex", "edit", "-o", f"{page}:{h}:{v}:{os.path.join(cdir, 'output.pdf')}"]
-        run = self.runner.run(command, cwd=cdir, timeout=60)
+        run = self.runner.run(command, cwd=cdir, timeout=60, env=sandbox_env())
         return parse_edit_output(run.stdout, cdir)
 
     def wordcount(self, project_id, user_id, filename) -> dict:
         name = self.compile_name(project_id, user_id)
         cdir = self.compile_dir(name)
         command = ["texcount", "-nocol", "-inc", os.path.join(cdir, filename)]
-        run = self.runner.run(command, cwd=cdir, timeout=60)
+        run = self.runner.run(command, cwd=cdir, timeout=60, env=sandbox_env())
         return parse_wordcount(run.stdout)

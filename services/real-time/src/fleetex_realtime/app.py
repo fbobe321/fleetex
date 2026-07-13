@@ -22,6 +22,7 @@ from .connected_users import ConnectedUsersManager
 from .document_updater import DocumentUpdaterManager
 from .redis_bridge import EDITOR_EVENTS_CHANNEL, build_editor_event
 from .server import RealtimeServer
+from .session_auth import SessionAuthenticator
 from .web_api import WebApiManager
 
 
@@ -38,7 +39,7 @@ def _parse_join_doc_args(args: tuple):
     return doc_id, from_version, options
 
 
-def _register_sio_handlers(sio: socketio.AsyncServer, server: RealtimeServer) -> None:
+def _register_sio_handlers(sio: socketio.AsyncServer, server: RealtimeServer, authenticator: SessionAuthenticator) -> None:
     @sio.event
     async def connect(sid, environ, auth):
         qs = parse_qs(environ.get("QUERY_STRING", ""))
@@ -47,7 +48,12 @@ def _register_sio_handlers(sio: socketio.AsyncServer, server: RealtimeServer) ->
             await sio.emit("connectionRejected", {"message": "missing ?projectId query flag on handshake"}, to=sid)
             return False
         auth = auth or {}
-        return await server.connect(sid, project_id, auth.get("user_id", "anonymous-user"), auth.get("anonymousAccessToken"))
+        # The authenticated user id comes from the signed session cookie, never
+        # from the client-supplied auth payload — otherwise any socket could
+        # impersonate any account. Fall back to anonymous (token access still
+        # gates via web's /join).
+        user_id = await authenticator.user_id_from_cookie_header(environ.get("HTTP_COOKIE", ""))
+        return await server.connect(sid, project_id, user_id or "anonymous-user", auth.get("anonymousAccessToken"))
 
     @sio.on("joinDoc")
     async def join_doc(sid, *args):
@@ -103,12 +109,14 @@ def build_app(config: RealtimeConfig | None = None, *, redis=None, web_api=None,
         await sio.disconnect(sid)
 
     server = RealtimeServer(emit=_emit, disconnect=_disconnect, web_api=web_api, du=du, connected_users=connected)
-    _register_sio_handlers(sio, server)
+    authenticator = SessionAuthenticator(redis, config.cookie_name, [config.session_secret])
+    _register_sio_handlers(sio, server, authenticator)
 
     app.state.config = config
     app.state.redis = redis
     app.state.connected = connected
     app.state.server = server
+    app.state.authenticator = authenticator
     app.state.sio = sio
 
     # ---- HTTP routes ---------------------------------------------------- #

@@ -26,6 +26,7 @@ from .file_tree import EditorEventsPublisher, FilestoreClient, FileTreeManager, 
 from .frontend import register_frontend_routes
 from .passwords import verify_password
 from .projects import ProjectManager, register_project_routes
+from .security import register_csrf_guard
 from .sessions import SessionStore, generate_session_id, get_logged_in_user_id, serialize_user
 from .users import UserManager
 
@@ -66,6 +67,8 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=
     app.state.store = store
     app.state.projects = projects
     app.state.config = config
+
+    register_csrf_guard(app, config=config)
 
     async def _session(request: Request):
         return await store.load_from_cookie(request.cookies.get(config.cookie_name))

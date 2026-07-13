@@ -47,6 +47,29 @@ def _check_path(path: str) -> str:
     return path
 
 
+# Substrings that, if present in a compiler flag, could re-enable arbitrary code
+# execution (\write18) or redirect reads/writes outside the sandbox. Fleetex may
+# run the compiler without container isolation, so these are rejected outright.
+_FORBIDDEN_FLAG_TOKENS = (
+    "shell-escape", "shellescape", "shell_escape",
+    "write18", "enable-pipes", "enable-installer",
+    "output-directory", "aux-directory", "outdir", "auxdir",
+    "cnf-line", "jobname",
+)
+
+
+def _validate_flag(flag) -> str:
+    if not isinstance(flag, str):
+        raise InvalidRequestError("each flag must be a string")
+    if not flag.startswith("-"):
+        # a non-option token would be treated as an input file / command
+        raise InvalidRequestError(f"flag {flag!r} must start with '-'")
+    normalized = flag.lower().replace("_", "-")
+    if any(tok in normalized for tok in _FORBIDDEN_FLAG_TOKENS):
+        raise InvalidRequestError(f"flag {flag!r} is not allowed")
+    return flag
+
+
 def _parse_resource(raw: dict) -> Resource:
     path = raw.get("path")
     if not isinstance(path, str):
@@ -88,6 +111,7 @@ def parse(body: dict) -> ParsedRequest:
     flags = options.get("flags", [])
     if not isinstance(flags, list):
         raise InvalidRequestError("flags must be a list")
+    flags = [_validate_flag(f) for f in flags]
 
     root = compile_.get("rootResourcePath", "main.tex")
     _check_path(root)
