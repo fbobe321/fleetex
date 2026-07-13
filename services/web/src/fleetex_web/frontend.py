@@ -43,7 +43,13 @@ button:hover{filter:brightness(1.1)}
 .tree .file:hover{background:#2a2e3a}.tree .file.active{background:#2f6fed33}
 .pane{display:flex;flex-direction:column;min-width:0}
 .pane .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
-.pane textarea{flex:1;border:0;background:#0e1016;color:#e6e8ee;padding:14px;resize:none;font:13px/1.6 ui-monospace,monospace}
+.edwrap{position:relative;flex:1;display:flex;min-height:0}
+.edwrap textarea{flex:1;border:0;background:#0e1016;color:#e6e8ee;padding:14px;resize:none;font:13px/1.6 ui-monospace,monospace}
+.cursors{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.rcursor{position:absolute;width:2px}
+.rlabel{position:absolute;font-size:10px;padding:0 4px;border-radius:3px;color:#fff;white-space:nowrap;transform:translateY(-100%);font-family:system-ui}
+.presence{display:flex;gap:4px;margin-right:8px}
+.avatar{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;border:1px solid #12141a}
 .pdf{display:flex;flex-direction:column;border-left:1px solid #2a2e3a;min-width:0}
 .pdf .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
 .pdf iframe{flex:1;border:0;background:#fff}
@@ -111,6 +117,7 @@ load();
 
 EDITOR_PAGE = _page("Fleetex — Editor", """
 <div class=top><a href=/projects>← Projects</a><span class=brand id=pname>…</span><span class=grow></span>
+  <span class=presence id=presence></span>
   <span class=muted id=conn>connecting…</span>
   <span class=muted id=status></span>
   <button id=compileBtn onclick=compile()>Compile ▶</button>
@@ -121,7 +128,10 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
     <div class=bar><span class=muted id=cur>No document open</span><span class=grow></span>
       <button id=save onclick=save() disabled>Save</button>
       <button class=ghost id=delbtn onclick=delDoc() disabled>Delete</button></div>
-    <textarea id=ed placeholder='Open a document from the file tree…'></textarea>
+    <div class=edwrap>
+      <textarea id=ed placeholder='Open a document from the file tree…'></textarea>
+      <div class=cursors id=cursors></div>
+    </div>
   </div>
   <div class=pdf>
     <div class=bar><span class=muted id=pdfstatus>Press Compile ▶ to build the PDF</span></div>
@@ -132,6 +142,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
 <script>
 const pid=location.pathname.split('/')[2];
 let boot=null, sock=null, doc=null, curId=null, lastValue='', applyingRemote=false;
+let myPublicId=null, myName='anon', peers={}, cursorTimer=null;
 function esc(s){return (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
 function setConn(t){conn.textContent=t}
 function fileLabel(id){const f=document.querySelector(`.file[data-id='${id}']`);return f?f.textContent.trim():'document'}
@@ -140,6 +151,7 @@ async function init(){
   if(b.status===401){location.href='/login';return}
   if(b.status===403){document.body.innerHTML='<div class=card><h1>No access</h1></div>';return}
   boot=await b.json();pname.textContent=boot.projectName||'Project';
+  myName=(boot.user&&(((boot.user.first_name||'')+' '+(boot.user.last_name||'')).trim()||boot.user.email))||'anon';
   await loadTree();
   connect();
   if(boot.rootDocId)openDoc(boot.rootDocId,'doc');
@@ -157,8 +169,44 @@ function handleEvent(event,args){
     const p=args[0]; if(!doc||p.doc!==curId) return;
     if(p.op!==undefined) applyRemote(p); else doc.onAck(p.v);
   } else if(event==='otUpdateError'){ setConn('🔴 sync error') }
+  else if(event==='joinProjectResponse'){ myPublicId=args[0].publicId }
+  else if(event==='clientTracking.clientUpdated'){
+    const p=args[0]; if(p.id&&p.id!==myPublicId){ peers[p.id]={name:p.name||p.user_id,color:Fleetex.colorFor(p.id),doc_id:p.doc_id,row:p.row,column:p.column,t:Date.now()}; renderPeers(); }
+  }
+  else if(event==='clientTracking.clientDisconnected'){ delete peers[args[0]]; renderPeers(); }
   else if(['reciveNewDoc','reciveNewFolder','reciveNewFile','removeEntity','reciveEntityRename','reciveEntityMove'].indexOf(event)>=0){ loadTree() }
 }
+function renderPeers(){
+  let bar='';
+  for(const id in peers){ const p=peers[id]; const ini=(p.name||'?').trim().split(/\s+/).map(s=>s[0]).join('').slice(0,2).toUpperCase()||'?'; bar+=`<span class=avatar title='${esc(p.name)}' style='background:${p.color}'>${esc(ini)}</span>`; }
+  presence.innerHTML=bar;
+  renderCursors();
+}
+function renderCursors(){
+  let html='';
+  for(const id in peers){
+    const p=peers[id]; if(p.doc_id!==curId||p.row==null) continue;
+    const pos=Fleetex.rowColToPos(ed.value,p.row,p.column);
+    const c=Fleetex.caretCoords(ed,pos);
+    const x=c.left-ed.scrollLeft, y=c.top-ed.scrollTop;
+    if(y<-20||y>ed.clientHeight+20) continue;
+    html+=`<div class=rcursor style='left:${x}px;top:${y}px;height:${c.height}px;background:${p.color}'></div>`;
+    html+=`<div class=rlabel style='left:${x}px;top:${y}px;background:${p.color}'>${esc(p.name)}</div>`;
+  }
+  cursors.innerHTML=html;
+}
+function requestPresence(){
+  if(!sock) return;
+  sock.emit('clientTracking.getConnectedUsers',function(err,users){
+    (users||[]).forEach(u=>{ if(u.client_id&&u.client_id!==myPublicId){ const cd=u.cursorData||{}; peers[u.client_id]={name:((u.first_name||'')+' '+(u.last_name||'')).trim()||u.user_id,color:Fleetex.colorFor(u.client_id),doc_id:cd.doc_id,row:cd.row,column:cd.column,t:Date.now()}; }});
+    renderPeers();
+  });
+}
+function sendCursor(){ if(!sock||!curId) return; const rc=Fleetex.posToRowCol(ed.value,ed.selectionStart); sock.emit('clientTracking.updatePosition',{doc_id:curId,row:rc.row,column:rc.column,name:myName}); }
+function sendCursorSoon(){ if(cursorTimer) return; cursorTimer=setTimeout(()=>{cursorTimer=null;sendCursor();},120); }
+setInterval(()=>{ const now=Date.now(); let ch=false; for(const id in peers){ if(now-peers[id].t>20000){ delete peers[id]; ch=true; } } if(ch) renderPeers(); },5000);
+['keyup','click'].forEach(evt=>ed.addEventListener(evt,sendCursorSoon));
+ed.addEventListener('scroll',renderCursors);
 async function loadTree(){
   const d=await (await fetch(`/project/${pid}/tree`)).json();
   tree.innerHTML=d.entities.map(e=>`<div class=file data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')">${e.type==='doc'?'📄':'📎'} ${esc(e.path.slice(1))}</div>`).join('')||'<div class=muted>Empty</div>';
@@ -176,6 +224,7 @@ function openDoc(id,type){
     const snap=(lines||['']).join('\\n');
     doc=new Fleetex.CollabDoc(snap,version||0,function(u){sock.emit('applyOtUpdate',id,{op:u.op,v:u.v,meta:{}})});
     ed.value=snap;lastValue=snap;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · live';
+    requestPresence(); sendCursor(); renderCursors();
   });
 }
 async function httpOpen(id){ // fallback when socket unavailable
@@ -186,6 +235,7 @@ ed.addEventListener('input',function(){
   if(applyingRemote) return;
   if(doc){ const op=Fleetex.makeOp(lastValue,ed.value); lastValue=ed.value; if(op.length) doc.submitLocal(op); }
   else lastValue=ed.value;
+  sendCursorSoon(); renderCursors();
 });
 function applyRemote(p){
   applyingRemote=true;

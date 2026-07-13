@@ -153,6 +153,30 @@ COLLAB_JS = r"""
     return incoming;
   };
 
-  window.Fleetex={ OT:OT, connect:connect, CollabDoc:CollabDoc, makeOp:makeOp };
+  // ---------- caret pixel position in a textarea (mirror-div technique) ----------
+  function caretCoords(el, index){
+    var style=getComputedStyle(el);
+    var div=document.createElement('div'); var s=div.style;
+    var props=['fontFamily','fontSize','fontWeight','fontStyle','letterSpacing','textTransform','wordSpacing','lineHeight','paddingTop','paddingRight','paddingBottom','paddingLeft','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth'];
+    props.forEach(function(p){ s[p]=style[p]; });
+    s.position='absolute'; s.visibility='hidden'; s.whiteSpace='pre-wrap'; s.wordWrap='break-word';
+    s.width=el.clientWidth+'px'; s.boxSizing=style.boxSizing; s.top='0'; s.left='-9999px';
+    div.textContent=el.value.slice(0,index);
+    var span=document.createElement('span'); span.textContent=el.value.slice(index)||'.'; div.appendChild(span);
+    document.body.appendChild(div);
+    var coords={left:span.offsetLeft, top:span.offsetTop, height:parseFloat(style.lineHeight)||16};
+    document.body.removeChild(div);
+    return coords;
+  }
+  // stable-ish color per user id
+  function colorFor(id){
+    var h=0; for(var i=0;i<id.length;i++) h=(h*31+id.charCodeAt(i))>>>0;
+    return 'hsl('+(h%360)+',70%,55%)';
+  }
+  // <-> between a linear index and {row,column}
+  function posToRowCol(text, pos){ var before=text.slice(0,pos).split('\n'); return {row:before.length-1, column:before[before.length-1].length}; }
+  function rowColToPos(text, row, column){ var lines=text.split('\n'); var p=0; for(var i=0;i<row && i<lines.length;i++) p+=lines[i].length+1; return p+column; }
+
+  window.Fleetex={ OT:OT, connect:connect, CollabDoc:CollabDoc, makeOp:makeOp, caretCoords:caretCoords, colorFor:colorFor, posToRowCol:posToRowCol, rowColToPos:rowColToPos };
 })();
 """

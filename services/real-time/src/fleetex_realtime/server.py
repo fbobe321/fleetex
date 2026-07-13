@@ -134,8 +134,10 @@ class RealtimeServer:
             {"user_id": ctx.user_id, "first_name": ctx.first_name, "last_name": ctx.last_name, "email": ctx.email},
             cursor,
         )
-        payload = {**cursor, "id": ctx.public_id, "user_id": ctx.user_id,
-                   "name": f"{ctx.first_name} {ctx.last_name}".strip(), "email": ctx.email}
+        # prefer a client-supplied display name (real-time's session doesn't carry
+        # the full user profile in this phase), else the session name, else user id.
+        name = cursor.get("name") or f"{ctx.first_name} {ctx.last_name}".strip() or ctx.user_id
+        payload = {**cursor, "id": ctx.public_id, "user_id": ctx.user_id, "name": name, "email": ctx.email}
         await self._emit_to_room(ctx.project_id, "clientTracking.clientUpdated", payload)
         return None
 

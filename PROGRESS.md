@@ -222,8 +222,19 @@ missing document-updater Dockerfile.
   POST compile → status success + output.pdf, fetched the 65 KB `%PDF-1.7` through
   web's proxy. Actual latexmk compilation on the Python stack.
 
+## Live cursors + presence ✅
+Server side already existed (clientTracking.*); wired the browser:
+- collab.js: caretCoords (mirror-div), colorFor, posToRowCol/rowColToPos.
+- editor page: presence avatar bar, remote-cursor overlay (colored caret + name
+  label), sends clientTracking.updatePosition on cursor move (throttled), handles
+  clientUpdated/clientDisconnected, getConnectedUsers on join. Prunes stale peers.
+- real-time server: preserve client-supplied display name in the broadcast.
+- **VERIFIED end-to-end (2 socket clients):** A moves cursor -> B receives it with
+  name; getConnectedUsers=2; disconnect broadcast received. (Pixel rendering is
+  best-effort/standard mirror-div; data flow proven.)
+
 ## Next session should do
-Phases 0-8 COMPLETE + live-collab + one-command compose + compile button. Remaining work is polish/hardening, user's
+Phases 0-8 COMPLETE + live-collab + compose + compile + presence. Remaining work is polish/hardening, user's
 choice:
 - **project-history** service (the one unported upstream service: version history/
   undo). Optional; similar hard-core caution as OT.
