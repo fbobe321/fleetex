@@ -19,6 +19,7 @@ from redis import asyncio as aioredis
 from . import authorization as authz
 from .auth import authenticate
 from .config import WebConfig
+from .collaborators import register_collaborator_routes
 from .compile import ClsiManager, register_compile_routes
 from .editor import DocstoreClient, register_editor_routes
 from .file_tree import EditorEventsPublisher, FilestoreClient, FileTreeManager, register_file_tree_routes
@@ -161,6 +162,9 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=
     events = events if events is not None else EditorEventsPublisher(redis)
     ft = FileTreeManager(db, docstore, filestore, events)
     app.state.file_tree = ft
+    # Collaborator routes register BEFORE file-tree: the literal `/members/:id`
+    # path must win over file-tree's `/{entity_type}/:id` catch-all.
+    register_collaborator_routes(app, pm=projects, db=db, store=store, config=config)
     register_file_tree_routes(app, pm=projects, db=db, store=store, config=config, ft=ft)
 
     clsi = clsi if clsi is not None else ClsiManager(config.clsi_url, config.document_updater_url, config.filestore_url)

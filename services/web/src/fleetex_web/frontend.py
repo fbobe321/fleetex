@@ -121,6 +121,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <span class=muted id=conn>connecting…</span>
   <span class=muted id=status></span>
   <button id=compileBtn onclick=compile()>Compile ▶</button>
+  <button class=ghost onclick=share()>Share</button>
   <button class=ghost onclick=newDoc()>New doc</button>
   <button class=ghost onclick=fileinput.click()>Upload</button>
   <input type=file id=fileinput style=display:none onchange=doUpload()></div>
@@ -252,6 +253,15 @@ async function save(){
   if(!curId)return;status.textContent='Saving…';
   const r=await fetch(`/project/${pid}/doc/${curId}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:ed.value})});
   status.textContent=r.ok?'Saved ✓':'Save failed';setTimeout(()=>status.textContent='',1500);
+}
+async function share(){
+  const m=await (await fetch(`/project/${pid}/members`)).json();
+  const list=(m.members||[]).map(x=>`  • ${x.email||x.user_id} (${x.privilegeLevel})`).join('\n')||'  (just you)';
+  const email=prompt('Project members:\n'+list+'\n\nInvite a collaborator by email (they get edit access):');
+  if(!email) return;
+  const r=await fetch(`/project/${pid}/members`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:email.trim(),privilegeLevel:'readAndWrite'})});
+  if(r.ok){ const d=await r.json(); alert('✓ Added '+d.member.email+' as an editor'); }
+  else { const d=await r.json().catch(()=>({})); alert('Could not add: '+((d.message&&d.message.text)||'error')); }
 }
 async function doUpload(){
   const f=fileinput.files[0]; if(!f) return;

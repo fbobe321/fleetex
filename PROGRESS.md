@@ -239,6 +239,13 @@ POSTs binaries there; ClsiManager includes fileRefs as url resources; clsi
 ResourceWriter fetches url resources into the compile dir. Editor: Upload button.
 **VERIFIED in compose:** uploaded a PNG -> \includegraphics -> compile success -> PDF.
 
+## Sharing / collaborators ✅ (verified)
+web/collaborators.py: GET/POST /project/:id/members + DELETE /project/:id/members/:uid
+(owner-only add/remove by email, moves between readAndWrite/review/readOnly). Editor:
+Share button. Registered BEFORE file-tree routes so /members/:id isn't shadowed by
+the /{entity_type}/:id catch-all. **VERIFIED in compose:** Alice shares -> Bob (a
+different user) sees it in his dashboard (readWrite/invite) and can open it.
+
 ## Next session should do
 Phases 0-8 COMPLETE + live-collab + compose + compile + presence. Remaining work is polish/hardening, user's
 choice:
