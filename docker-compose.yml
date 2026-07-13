@@ -8,7 +8,10 @@
 # Services talk to each other over the compose network by service name; only web
 # (3000) and real-time (3026, the browser websocket) are published to the host.
 # All Dockerfiles build from the repo root (they COPY services/_kit + the service).
-name: fleetex
+#
+# NOTE: distinct from the `fleetex` PyPI launcher's compose project (which runs
+# stock Overleaf CE on :8080). This is the Python reimplementation, on :3000.
+name: fleetex-app
 
 x-build: &repo-root
   context: .
@@ -96,7 +99,11 @@ services:
       SESSION_SECRET: fleetex-dev-secret-change-me
       OPEN_REGISTRATION: "true"
       # The browser connects to real-time directly, so this is a HOST-reachable URL:
-      WEBSOCKET_URL: http://localhost:3026
+      # The browser opens the live-sync websocket to THIS url directly, so it
+      # must be reachable from wherever the browser runs. Default suits a browser
+      # on the docker host; for LAN/remote access override it, e.g.:
+      #   WEBSOCKET_URL=http://192.168.50.21:3026 docker compose up -d web
+      WEBSOCKET_URL: ${WEBSOCKET_URL:-http://localhost:3026}
       WEB_API_USER: overleaf
       WEB_API_PASSWORD: password
     ports:

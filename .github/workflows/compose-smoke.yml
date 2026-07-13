@@ -1,0 +1,43 @@
+name: compose-smoke
+
+# Full-stack integration gate: build the whole docker-compose stack and run an
+# end-to-end HTTP smoke test through it. Kept separate from the fast unit CI
+# because clsi ships a TeX Live layer, so the build is heavy.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free up disk space for the TeX Live image
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/share/swift /opt/hostedtoolcache/CodeQL || true
+          df -h
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install smoke-test deps
+        run: pip install "httpx>=0.27"
+
+      - name: Build & start the stack
+        run: docker compose up -d --build
+
+      - name: Run the full-stack smoke test
+        run: python services/smoke_test.py
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose ps && docker compose logs --tail=300
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
