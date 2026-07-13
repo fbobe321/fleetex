@@ -67,6 +67,20 @@ async def test_synctex_and_wordcount(app):
     assert wc.json["texcount"]["textWords"] == 42
 
 
+async def test_output_file_serving(app):
+    import os
+    # place a compiled output where save_output_files would put it, then fetch it
+    build = "abc123-def456"
+    out_dir = os.path.join(app.state.manager.output_dir(PID), "generated-files", build)
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "output.pdf"), "wb") as fh:
+        fh.write(b"%PDF-1.5 compiled")
+    r = await call_asgi(app, "GET", f"/project/{PID}/build/{build}/output/output.pdf")
+    assert r.status == 200 and r.text == "%PDF-1.5 compiled"
+    missing = await call_asgi(app, "GET", f"/project/{PID}/build/{build}/output/nope.pdf")
+    assert missing.status == 404
+
+
 async def test_synctex_404_without_output(app):
     # no compile yet -> output.synctex.gz missing -> 404
     r = await call_asgi(app, "GET", f"/project/{PID}/sync/code", params={"file": "main.tex", "line": 1, "column": 1})

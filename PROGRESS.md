@@ -210,8 +210,20 @@ real-time:3026 published to host; browser WEBSOCKET_URL=http://localhost:3026).
 it; all 9 services build+start (clsi's TeX Live layer is heavy but valid). Added the
 missing document-updater Dockerfile.
 
+## Compile button wired to clsi ✅ (real LaTeX compile verified)
+- clsi serves output files (`GET /project/:id/build/:build/output/:file`, what nginx
+  did upstream).
+- web `compile.py`: `ClsiManager` gathers each doc's live content from
+  document-updater, POSTs the clsi compile request, rewrites output URLs to
+  web-proxied paths; routes `POST /project/:id/compile` + `GET /project/:id/output/
+  :build/:file` (proxies clsi). Config: CLSI_URL, DOCUMENT_UPDATER_URL.
+- Editor page: "Compile ▶" button + PDF preview pane (iframe), Ctrl/Cmd+Enter.
+- **VERIFIED end-to-end in the compose stack (clsi has TeX Live):** wrote real LaTeX,
+  POST compile → status success + output.pdf, fetched the 65 KB `%PDF-1.7` through
+  web's proxy. Actual latexmk compilation on the Python stack.
+
 ## Next session should do
-Phases 0-8 of the ROADMAP are COMPLETE + live-collab wired + one-command compose. Remaining work is polish/hardening, user's
+Phases 0-8 COMPLETE + live-collab + one-command compose + compile button. Remaining work is polish/hardening, user's
 choice:
 - **project-history** service (the one unported upstream service: version history/
   undo). Optional; similar hard-core caution as OT.

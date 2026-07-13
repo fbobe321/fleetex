@@ -7,10 +7,11 @@ Param validation: project_id ~ /^[a-zA-Z0-9_-]+$/, user_id ~ /^[0-9a-f]{24}$/
 
 from __future__ import annotations
 
+import os
 import re
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fleetex_service_kit import Settings, create_app
 
 from . import request_parser
@@ -179,6 +180,16 @@ def build_app(config: ClsiConfig | None = None, *, runner=None) -> FastAPI:
     @app.post("/project/{project_id}/status")
     async def project_status(project_id: str):
         return PlainTextResponse("OK")
+
+    # -- output file serving (nginx's job upstream; here we serve it) ----- #
+    @app.get("/project/{project_id}/build/{build_id}/output/{file_path:path}")
+    async def get_output_file(project_id: str, build_id: str, file_path: str):
+        if not _PROJECT_ID.match(project_id) or ".." in file_path:
+            return Response(status_code=404)
+        path = os.path.join(manager.output_dir(project_id), "generated-files", build_id, file_path)
+        if not os.path.isfile(path):
+            return Response(status_code=404)
+        return FileResponse(path)
 
     @app.get("/health_check")
     async def health_check():

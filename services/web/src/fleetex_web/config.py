@@ -20,6 +20,8 @@ class WebConfig:
     mongo_url: str = "mongodb://mongo/sharelatex"
     redis_url: str = "redis://redis:6379"
     docstore_url: str = "http://docstore:3016"
+    clsi_url: str = "http://clsi:3013"
+    document_updater_url: str = "http://document-updater:3003"
     # editor bootstrap config
     ws_url: str = "/socket.io"
     ws_retry_handshake: int = 5
@@ -51,6 +53,8 @@ class WebConfig:
             mongo_url=env.get("MONGO_URL") or env.get("OVERLEAF_MONGO_URL") or "mongodb://mongo/sharelatex",
             redis_url=env.get("REDIS_URL", f"redis://{host}:{env.get('REDIS_PORT', '6379')}"),
             docstore_url=env.get("DOCSTORE_URL", "http://docstore:3016"),
+            clsi_url=env.get("CLSI_URL", "http://clsi:3013"),
+            document_updater_url=env.get("DOCUMENT_UPDATER_URL", "http://document-updater:3003"),
             ws_url=env.get("WEBSOCKET_URL", "/socket.io"),
             ws_retry_handshake=int(env.get("WEBSOCKET_RETRY_HANDSHAKE", 5)),
             open_registration=env.get("OPEN_REGISTRATION", "true").lower() in ("1", "true", "yes"),

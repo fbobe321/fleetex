@@ -37,13 +37,16 @@ button:hover{filter:brightness(1.1)}
 .list{max-width:760px;margin:24px auto;padding:0 16px}
 .proj{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#1b1e27;border:1px solid #2a2e3a;border-radius:10px;margin-bottom:8px}
 .proj .grow{flex:1}.proj .name{font-weight:600}
-.editor{display:grid;grid-template-columns:260px 1fr;height:calc(100vh - 49px)}
+.editor{display:grid;grid-template-columns:240px 1fr 1fr;height:calc(100vh - 49px)}
 .tree{border-right:1px solid #2a2e3a;overflow:auto;padding:8px}
 .tree .file{padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;gap:8px}
 .tree .file:hover{background:#2a2e3a}.tree .file.active{background:#2f6fed33}
-.pane{display:flex;flex-direction:column}
+.pane{display:flex;flex-direction:column;min-width:0}
 .pane .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
 .pane textarea{flex:1;border:0;background:#0e1016;color:#e6e8ee;padding:14px;resize:none;font:13px/1.6 ui-monospace,monospace}
+.pdf{display:flex;flex-direction:column;border-left:1px solid #2a2e3a;min-width:0}
+.pdf .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
+.pdf iframe{flex:1;border:0;background:#fff}
 """
 
 
@@ -110,7 +113,8 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
 <div class=top><a href=/projects>← Projects</a><span class=brand id=pname>…</span><span class=grow></span>
   <span class=muted id=conn>connecting…</span>
   <span class=muted id=status></span>
-  <button onclick=newDoc()>New doc</button></div>
+  <button id=compileBtn onclick=compile()>Compile ▶</button>
+  <button class=ghost onclick=newDoc()>New doc</button></div>
 <div class=editor>
   <div class=tree id=tree></div>
   <div class=pane>
@@ -118,6 +122,10 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
       <button id=save onclick=save() disabled>Save</button>
       <button class=ghost id=delbtn onclick=delDoc() disabled>Delete</button></div>
     <textarea id=ed placeholder='Open a document from the file tree…'></textarea>
+  </div>
+  <div class=pdf>
+    <div class=bar><span class=muted id=pdfstatus>Press Compile ▶ to build the PDF</span></div>
+    <iframe id=pdfframe></iframe>
   </div>
 </div>
 <script src="/assets/collab.js"></script>
@@ -195,7 +203,26 @@ async function save(){
 }
 async function newDoc(){const n=prompt('New document name (e.g. chapter.tex):');if(!n)return;const r=await fetch(`/project/${pid}/doc`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n})});if(r.ok){await loadTree();const d=await r.json();openDoc(d._id,'doc')}else alert('Could not create document')}
 async function delDoc(){if(!curId||!confirm('Delete this entity?'))return;const f=document.querySelector(`.file[data-id='${curId}']`);const type=f?f.dataset.type:'doc';await fetch(`/project/${pid}/${type}/${curId}`,{method:'DELETE'});curId=null;doc=null;ed.value='';save.disabled=true;delbtn.disabled=true;cur.textContent='No document open';loadTree()}
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();save()}});
+async function compile(){
+  if(doc) await save().catch(()=>{});  // flush current doc so the compile sees it
+  compileBtn.disabled=true;pdfstatus.textContent='Compiling…';
+  try{
+    const r=await fetch(`/project/${pid}/compile`,{method:'POST'});
+    if(!r.ok){pdfstatus.textContent='compile request failed';return}
+    const c=(await r.json()).compile||{};
+    const pdf=(c.outputFiles||[]).find(f=>f.path==='output.pdf');
+    if(c.status==='success'&&pdf){ pdfframe.src=pdf.url+'?t='+Date.now(); pdfstatus.textContent='✓ compiled' }
+    else{
+      pdfstatus.textContent='✗ '+(c.status||'failed')+(c.error?' — '+c.error:'');
+      const log=(c.outputFiles||[]).find(f=>f.path==='output.log');
+      if(log) pdfframe.src=log.url+'?t='+Date.now();
+    }
+  }finally{ compileBtn.disabled=false }
+}
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();save()}
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();compile()}
+});
 init();
 </script>""")
 
