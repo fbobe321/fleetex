@@ -46,6 +46,37 @@ async def test_create_project(app, db, config):
     assert project["archived"] == [] and project["trashed"] == []
 
 
+class _RecordingDocstore:
+    def __init__(self):
+        self.seeded = []
+
+    async def update_doc(self, project_id, doc_id, lines, version=0, ranges=None):
+        self.seeded.append({"project_id": project_id, "doc_id": doc_id, "lines": lines, "version": version})
+
+
+async def test_create_seeds_compilable_root_doc(db, config):
+    # a fresh project must open with content and compile out of the box (an empty
+    # main.tex fails with "no legal \\end found")
+    from fakeredis import FakeAsyncRedis
+    from fleetex_web.app import build_app
+
+    docstore = _RecordingDocstore()
+    app = build_app(config, db=db, redis=FakeAsyncRedis(decode_responses=True), docstore=docstore)
+    user = await _user(db, "seed@b.com")
+    headers = await _session(app, config, user)
+    r = await call_asgi(app, "POST", "/project/new", headers=headers, json={"projectName": "Seeded"})
+    assert r.status == 200
+    pid = r.json["project_id"]
+    project = await app.state.projects.find_by_id(pid)
+    assert len(docstore.seeded) == 1
+    seed = docstore.seeded[0]
+    assert seed["project_id"] == pid
+    assert seed["doc_id"] == str(project["rootDoc_id"])
+    assert seed["lines"][0].startswith("\\documentclass")
+    assert any("\\begin{document}" in ln for ln in seed["lines"])
+    assert any("\\end{document}" in ln for ln in seed["lines"])
+
+
 async def test_create_requires_login(app):
     r = await call_asgi(app, "POST", "/project/new", json={"projectName": "X"})
     assert r.status == 401

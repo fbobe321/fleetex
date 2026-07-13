@@ -21,6 +21,25 @@ from .sessions import get_logged_in_user_id
 MAX_PROJECT_NAME_LENGTH = 150
 DEFAULT_MAIN_TEX = "main.tex"
 
+# Seeded into a new project's root doc so it opens with content and compiles out
+# of the box (an empty main.tex fails with "no legal \\end found").
+DEFAULT_DOC_LINES = [
+    "\\documentclass{article}",
+    "\\usepackage{graphicx}",
+    "",
+    "\\title{Your Paper}",
+    "\\author{}",
+    "\\date{\\today}",
+    "",
+    "\\begin{document}",
+    "\\maketitle",
+    "",
+    "\\section{Introduction}",
+    "Welcome to Fleetex. Start writing your document here.",
+    "",
+    "\\end{document}",
+]
+
 
 class InvalidNameError(ValueError):
     pass
@@ -377,6 +396,14 @@ def register_project_routes(app: FastAPI, *, pm: ProjectManager, db, store, conf
         except InvalidNameError as exc:
             return JSONResponse({"message": {"type": "error", "text": str(exc)}}, status_code=400)
         project = await pm.create_basic(uid, name, image_name=config.__dict__.get("current_image_name"))
+        # Seed the root doc so a fresh project opens with content and compiles
+        # immediately. Best-effort: a docstore hiccup must not fail creation.
+        docstore = getattr(request.app.state, "docstore", None)
+        if docstore is not None:
+            try:
+                await docstore.update_doc(str(project["_id"]), str(project["rootDoc_id"]), list(DEFAULT_DOC_LINES), 1)
+            except Exception:  # noqa: BLE001 - seeding is best-effort
+                pass
         owner = await db["users"].find_one({"_id": ObjectId(uid)}, {"first_name": 1, "last_name": 1, "email": 1})
         return JSONResponse({
             "project_id": str(project["_id"]),
