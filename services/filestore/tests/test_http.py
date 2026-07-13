@@ -54,6 +54,16 @@ async def test_generic_bucket_route(app):
     assert r.status == 200 and r.text == "bucketdata"
 
 
+async def test_project_file_roundtrip(app):
+    pid, fid = "5f9f1b0b0b0b0b0b0b0b0b0b", "600000000000000000000001"
+    put = await call_asgi(app, "POST", f"/project/{pid}/file/{fid}", content=b"PNG-fake-image-bytes")
+    assert put.status == 200 and put.text == "OK"
+    got = await call_asgi(app, "GET", f"/project/{pid}/file/{fid}")
+    assert got.status == 200 and got.text == "PNG-fake-image-bytes"
+    missing = await call_asgi(app, "GET", f"/project/{pid}/file/{'0'*24}")
+    assert missing.status == 404
+
+
 async def test_history_global_blob_route(app):
     stores = app.state.config.stores
     h = "abcdef0123456789abcdef"

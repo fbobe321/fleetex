@@ -46,7 +46,18 @@ class ResourceWriter:
         if resource.content is not None:
             with open(dest, "w", encoding="utf-8") as fh:
                 fh.write(resource.content)
-        # URL-backed resources: deferred (needs filestore UrlCache).
+        elif resource.url:
+            # download URL-backed resources (e.g. binary files from filestore).
+            # Failures are swallowed so a missing asset doesn't abort the compile.
+            try:
+                import httpx
+
+                resp = httpx.get(resource.url, timeout=30, follow_redirects=True)
+                if resp.status_code == 200:
+                    with open(dest, "wb") as fh:
+                        fh.write(resp.content)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _remove_extraneous(self, resources: list) -> None:
         keep = {os.path.normpath(r.path) for r in resources}

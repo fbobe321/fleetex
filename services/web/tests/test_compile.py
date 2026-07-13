@@ -81,6 +81,36 @@ async def test_output_proxy_streams_pdf(app, db, config):
     assert "application/pdf" in r.headers.get("content-type", "")
 
 
+async def test_clsi_manager_includes_doc_content_and_file_urls():
+    import json
+
+    import httpx
+    from bson import ObjectId
+
+    captured = {}
+
+    def handler(request):
+        if request.url.path.endswith("/compile"):
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"compile": {"status": "success", "outputFiles": []}})
+        return httpx.Response(200, json={"lines": ["\\documentclass{article}"], "version": 0})  # doc content
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    cm = ClsiManager("http://clsi", "http://du", "http://filestore:3009", http=client)
+    root_doc, img = ObjectId(), ObjectId()
+    project = {"rootDoc_id": root_doc, "compiler": "pdflatex", "rootFolder": [{
+        "_id": ObjectId(), "name": "rootFolder",
+        "docs": [{"_id": root_doc, "name": "main.tex"}],
+        "fileRefs": [{"_id": img, "name": "logo.png"}], "folders": []}]}
+    await cm.compile("proj1", project)
+    resources = captured["body"]["compile"]["resources"]
+    doc_res = [r for r in resources if "content" in r]
+    file_res = [r for r in resources if "url" in r]
+    assert captured["body"]["compile"]["rootResourcePath"] == "main.tex"
+    assert any(r["path"] == "main.tex" and "documentclass" in r["content"] for r in doc_res)
+    assert file_res == [{"path": "logo.png", "url": f"http://filestore:3009/project/proj1/file/{img}"}]
+
+
 def test_doc_entities_walks_tree():
     from bson import ObjectId
     d1, d2 = ObjectId(), ObjectId()

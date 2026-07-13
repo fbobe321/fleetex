@@ -121,7 +121,9 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <span class=muted id=conn>connecting…</span>
   <span class=muted id=status></span>
   <button id=compileBtn onclick=compile()>Compile ▶</button>
-  <button class=ghost onclick=newDoc()>New doc</button></div>
+  <button class=ghost onclick=newDoc()>New doc</button>
+  <button class=ghost onclick=fileinput.click()>Upload</button>
+  <input type=file id=fileinput style=display:none onchange=doUpload()></div>
 <div class=editor>
   <div class=tree id=tree></div>
   <div class=pane>
@@ -250,6 +252,14 @@ async function save(){
   if(!curId)return;status.textContent='Saving…';
   const r=await fetch(`/project/${pid}/doc/${curId}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:ed.value})});
   status.textContent=r.ok?'Saved ✓':'Save failed';setTimeout(()=>status.textContent='',1500);
+}
+async function doUpload(){
+  const f=fileinput.files[0]; if(!f) return;
+  const fd=new FormData(); fd.append('qqfile',f); fd.append('name',f.name);
+  status.textContent='Uploading '+f.name+'…';
+  const r=await fetch(`/project/${pid}/upload`,{method:'POST',body:fd}); fileinput.value='';
+  status.textContent=r.ok?('✓ uploaded '+f.name):'upload failed'; setTimeout(()=>status.textContent='',2000);
+  if(r.ok) loadTree();
 }
 async function newDoc(){const n=prompt('New document name (e.g. chapter.tex):');if(!n)return;const r=await fetch(`/project/${pid}/doc`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n})});if(r.ok){await loadTree();const d=await r.json();openDoc(d._id,'doc')}else alert('Could not create document')}
 async function delDoc(){if(!curId||!confirm('Delete this entity?'))return;const f=document.querySelector(`.file[data-id='${curId}']`);const type=f?f.dataset.type:'doc';await fetch(`/project/${pid}/${type}/${curId}`,{method:'DELETE'});curId=null;doc=null;ed.value='';save.disabled=true;delbtn.disabled=true;cur.textContent='No document open';loadTree()}

@@ -32,6 +32,9 @@ class FilestoreConfig:
             "template_files": env.get("TEMPLATE_FILES_BUCKET_NAME") or os.path.join(base, "template_files"),
             "global_blobs": env.get("OVERLEAF_EDITOR_BLOBS_BUCKET") or os.path.join(base, "global_blobs"),
             "project_blobs": env.get("OVERLEAF_EDITOR_PROJECT_BLOBS_BUCKET") or os.path.join(base, "project_blobs"),
+            # Fleetex extension: project file storage (this upstream filestore version
+            # is storage-only; we add a project/file store so binaries persist).
+            "project_files": env.get("PROJECT_FILES_BUCKET_NAME") or os.path.join(base, "project_files"),
         }
         return cls(
             backend=backend,

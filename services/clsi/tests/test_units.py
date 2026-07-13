@@ -74,6 +74,22 @@ def test_resource_writer_writes_and_cleans(tmp_path):
     assert "stateHash:s1" in open(os.path.join(base, ".project-sync-state")).read()
 
 
+def test_resource_writer_fetches_url(tmp_path, monkeypatch):
+    base = str(tmp_path / "c")
+    os.makedirs(base)
+    from fleetex_clsi.request_parser import ParsedRequest, Resource
+
+    class FakeResp:
+        status_code = 200
+        content = b"\x89PNG binary-image-bytes"
+
+    monkeypatch.setattr("httpx.get", lambda url, **kw: FakeResp())
+    p = ParsedRequest(resources=[Resource(path="figures/logo.png", url="http://filestore:3009/project/p/file/f")])
+    ResourceWriter(base).sync_resources_to_disk(p)
+    with open(os.path.join(base, "figures", "logo.png"), "rb") as fh:
+        assert fh.read() == b"\x89PNG binary-image-bytes"
+
+
 def test_resource_writer_rejects_escape(tmp_path):
     base = str(tmp_path / "c")
     os.makedirs(base)

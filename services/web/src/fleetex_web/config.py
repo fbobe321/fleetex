@@ -22,6 +22,7 @@ class WebConfig:
     docstore_url: str = "http://docstore:3016"
     clsi_url: str = "http://clsi:3013"
     document_updater_url: str = "http://document-updater:3003"
+    filestore_url: str = "http://filestore:3009"
     # editor bootstrap config
     ws_url: str = "/socket.io"
     ws_retry_handshake: int = 5
@@ -55,6 +56,7 @@ class WebConfig:
             docstore_url=env.get("DOCSTORE_URL", "http://docstore:3016"),
             clsi_url=env.get("CLSI_URL", "http://clsi:3013"),
             document_updater_url=env.get("DOCUMENT_UPDATER_URL", "http://document-updater:3003"),
+            filestore_url=env.get("FILESTORE_URL", "http://filestore:3009"),
             ws_url=env.get("WEBSOCKET_URL", "/socket.io"),
             ws_retry_handshake=int(env.get("WEBSOCKET_RETRY_HANDSHAKE", 5)),
             open_registration=env.get("OPEN_REGISTRATION", "true").lower() in ("1", "true", "yes"),

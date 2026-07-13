@@ -15,6 +15,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
+import httpx
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import FastAPI, File, Form, Request, Response, UploadFile
@@ -133,15 +134,26 @@ def _is_top_level(project: dict, parent: dict) -> bool:
 
 # --- bridges ------------------------------------------------------------- #
 class FilestoreClient:
-    """Stores an uploaded binary and returns its content hash.
+    """Stores an uploaded binary in filestore and returns its content hash.
 
-    NOTE: this Overleaf filestore version is storage-only (no project-file upload
-    route), so binary *persistence* to filestore is deferred; we compute the sha256
-    hash (what the fileRef records) and treat storage as a bridge point. Injectable.
+    POSTs to the filestore project-file route (a Fleetex extension). A filestore
+    outage doesn't fail the tree mutation — the fileRef/hash is still recorded.
+    Injectable for tests.
     """
 
+    def __init__(self, base_url: str = "", http=None) -> None:
+        self.base_url = (base_url or "").rstrip("/")
+        self.http = http
+
     async def upload(self, project_id: str, file_id: str, content: bytes) -> str:
-        return hashlib.sha256(content).hexdigest()
+        digest = hashlib.sha256(content).hexdigest()
+        if self.base_url:
+            try:
+                client = self.http or httpx.AsyncClient(timeout=30)
+                await client.post(f"{self.base_url}/project/{project_id}/file/{file_id}", content=content)
+            except Exception:  # noqa: BLE001 - persistence best-effort; metadata still recorded
+                pass
+        return digest
 
 
 class EditorEventsPublisher:
@@ -397,7 +409,10 @@ def register_file_tree_routes(app: FastAPI, *, pm: ProjectManager, db, store, co
         if len(content) > 50 * 1024 * 1024:
             return JSONResponse({"success": False, "error": "file_too_large"}, status_code=422)
         try:
-            result = await ft.upload(project, request.query_params.get("folder_id"), name, content, uid)
+            folder_id = request.query_params.get("folder_id")
+            if folder_id in (None, "", "null", "None"):
+                folder_id = None  # default to the root folder
+            result = await ft.upload(project, folder_id, name, content, uid)
         except FileTreeError as exc:
             return JSONResponse({"success": False, "error": exc.code}, status_code=422)
         return JSONResponse({"success": True, **result})

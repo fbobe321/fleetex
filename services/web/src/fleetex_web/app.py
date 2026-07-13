@@ -157,13 +157,13 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=
     app.state.docstore = docstore
     register_editor_routes(app, pm=projects, db=db, store=store, config=config, docstore=docstore)
 
-    filestore = filestore if filestore is not None else FilestoreClient()
+    filestore = filestore if filestore is not None else FilestoreClient(config.filestore_url)
     events = events if events is not None else EditorEventsPublisher(redis)
     ft = FileTreeManager(db, docstore, filestore, events)
     app.state.file_tree = ft
     register_file_tree_routes(app, pm=projects, db=db, store=store, config=config, ft=ft)
 
-    clsi = clsi if clsi is not None else ClsiManager(config.clsi_url, config.document_updater_url)
+    clsi = clsi if clsi is not None else ClsiManager(config.clsi_url, config.document_updater_url, config.filestore_url)
     app.state.clsi = clsi
     register_compile_routes(app, pm=projects, store=store, config=config, clsi=clsi)
 

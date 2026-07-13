@@ -151,6 +151,24 @@ def build_app(config: FilestoreConfig | None = None) -> FastAPI:
         async def template_post(template_id: str, version: str, fmt: str, request: Request):
             return await _insert(request, template_file_key(config.stores, template_id, version, fmt))
 
+    # ---- project files (Fleetex extension: persist project binaries) ------ #
+    _project_files_bucket = config.stores.get("project_files")
+
+    @app.post("/project/{project_id}/file/{file_id}")
+    async def project_file_put(project_id: str, file_id: str, request: Request):
+        await persistor.send_stream(
+            _project_files_bucket, f"{project_id}/{file_id}", request.stream(), use_subdirectories=True
+        )
+        return PlainTextResponse("OK", status_code=200)
+
+    @app.get("/project/{project_id}/file/{file_id}")
+    async def project_file_get(project_id: str, file_id: str):
+        key = f"{project_id}/{file_id}"
+        if not persistor.check_if_object_exists(_project_files_bucket, key, use_subdirectories=True):
+            return Response(status_code=404)
+        gen = persistor.get_object_stream(_project_files_bucket, key, use_subdirectories=True)
+        return StreamingResponse(gen, status_code=200, media_type=None)
+
     # ---- generic bucket passthrough --------------------------------------- #
     @app.get("/bucket/{bucket}/key/{key:path}")
     async def bucket_get(bucket: str, key: str, request: Request):

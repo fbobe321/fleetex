@@ -233,6 +233,12 @@ Server side already existed (clientTracking.*); wired the browser:
   name; getConnectedUsers=2; disconnect broadcast received. (Pixel rendering is
   best-effort/standard mirror-div; data flow proven.)
 
+## Images in compiles ✅ (verified)
+filestore: project-file store (POST/GET /project/:id/file/:fid). web: FilestoreClient
+POSTs binaries there; ClsiManager includes fileRefs as url resources; clsi
+ResourceWriter fetches url resources into the compile dir. Editor: Upload button.
+**VERIFIED in compose:** uploaded a PNG -> \includegraphics -> compile success -> PDF.
+
 ## Next session should do
 Phases 0-8 COMPLETE + live-collab + compose + compile + presence. Remaining work is polish/hardening, user's
 choice:

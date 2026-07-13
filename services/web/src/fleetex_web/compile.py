@@ -31,10 +31,26 @@ def _doc_entities(project: dict) -> list[tuple[str, str]]:
     return out
 
 
+def _file_entities(project: dict) -> list[tuple[str, str]]:
+    """(file_id, path) for every binary file (fileRef) in the tree."""
+    out: list[tuple[str, str]] = []
+
+    def walk(folder: dict, prefix: str) -> None:
+        for f in folder.get("fileRefs", []):
+            out.append((str(f["_id"]), f"{prefix}/{f['name']}"))
+        for sub in folder.get("folders", []):
+            walk(sub, f"{prefix}/{sub['name']}")
+
+    root = (project.get("rootFolder") or [{}])[0]
+    walk(root, "")
+    return out
+
+
 class ClsiManager:
-    def __init__(self, clsi_url: str, document_updater_url: str, http: httpx.AsyncClient | None = None) -> None:
+    def __init__(self, clsi_url: str, document_updater_url: str, filestore_url: str = "", http: httpx.AsyncClient | None = None) -> None:
         self.clsi_url = clsi_url.rstrip("/")
         self.du_url = document_updater_url.rstrip("/")
+        self.filestore_url = (filestore_url or "").rstrip("/")
         self.http = http or httpx.AsyncClient(timeout=60)
 
     async def _doc_content(self, project_id: str, doc_id: str) -> str:
@@ -52,6 +68,10 @@ class ClsiManager:
             resources.append({"path": rel, "content": await self._doc_content(project_id, doc_id)})
             if doc_id == root_doc_id:
                 root_path = rel
+        # binary files: clsi fetches them from filestore by URL (e.g. \includegraphics)
+        for file_id, path in _file_entities(project):
+            if self.filestore_url:
+                resources.append({"path": path.lstrip("/"), "url": f"{self.filestore_url}/project/{project_id}/file/{file_id}"})
         body = {
             "compile": {
                 "options": {"compiler": project.get("compiler", "pdflatex")},

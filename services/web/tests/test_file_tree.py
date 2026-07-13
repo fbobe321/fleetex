@@ -47,9 +47,24 @@ def events():
     return FakeEvents()
 
 
+class FakeFilestore:
+    def __init__(self):
+        self.uploaded = []
+
+    async def upload(self, project_id, file_id, content):
+        self.uploaded.append((project_id, file_id, content))
+        import hashlib
+        return hashlib.sha256(content).hexdigest()
+
+
 @pytest.fixture
-def app(config, db, redis, docstore, events):
-    return build_app(config, db=db, redis=redis, docstore=docstore, events=events)
+def filestore():
+    return FakeFilestore()
+
+
+@pytest.fixture
+def app(config, db, redis, docstore, events, filestore):
+    return build_app(config, db=db, redis=redis, docstore=docstore, events=events, filestore=filestore)
 
 
 async def _owner(db):
@@ -192,7 +207,7 @@ async def test_upload_text_becomes_doc(app, db, config, docstore, events):
     assert events.of("reciveNewDoc")
 
 
-async def test_upload_binary_becomes_file(app, db, config, events):
+async def test_upload_binary_becomes_file(app, db, config, events, filestore):
     owner = await _owner(db)
     project = await _project(app, owner)
     r = await call_asgi(
@@ -203,6 +218,9 @@ async def test_upload_binary_becomes_file(app, db, config, events):
     assert r.status == 200 and r.json["entity_type"] == "file"
     assert len(r.json["hash"]) == 64  # sha256 hex
     assert events.of("reciveNewFile")
+    # binary was actually sent to filestore for persistence
+    assert len(filestore.uploaded) == 1
+    assert filestore.uploaded[0][2] == b"\x89PNG\x00\x01\x02"
 
 
 # --- auth ---------------------------------------------------------------- #
