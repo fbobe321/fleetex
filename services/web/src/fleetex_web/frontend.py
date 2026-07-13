@@ -43,8 +43,12 @@ button:hover{filter:brightness(1.1)}
 .tree .file:hover{background:#2a2e3a}.tree .file.active{background:#2f6fed33}
 .pane{display:flex;flex-direction:column;min-width:0}
 .pane .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
-.edwrap{position:relative;flex:1;display:flex;min-height:0}
-.edwrap textarea{flex:1;border:0;background:#0e1016;color:#e6e8ee;padding:14px;resize:none;font:13px/1.6 ui-monospace,monospace}
+.edwrap{flex:1;display:flex;min-height:0;background:#0e1016;overflow:hidden}
+.gutter{padding:14px 8px 14px 12px;text-align:right;color:#454b5c;background:#0e1016;font:13px/1.6 ui-monospace,monospace;white-space:pre;overflow:hidden;user-select:none;border-right:1px solid #1b1e27}
+.edarea{position:relative;flex:1;min-width:0}
+.hl{position:absolute;inset:0;margin:0;padding:14px;font:13px/1.6 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;overflow:auto;pointer-events:none;color:#e6e8ee}
+.edarea textarea{position:absolute;inset:0;padding:14px;border:0;background:transparent;color:transparent;caret-color:#e6e8ee;white-space:pre-wrap;word-break:break-word;resize:none;font:13px/1.6 ui-monospace,monospace}
+.tok-cmd{color:#6ea8fe}.tok-com{color:#5b6270;font-style:italic}.tok-mth{color:#e0a458}.tok-brc{color:#c678dd}
 .cursors{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .rcursor{position:absolute;width:2px}
 .rlabel{position:absolute;font-size:10px;padding:0 4px;border-radius:3px;color:#fff;white-space:nowrap;transform:translateY(-100%);font-family:system-ui}
@@ -132,12 +136,17 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
       <button id=save onclick=save() disabled>Save</button>
       <button class=ghost id=delbtn onclick=delDoc() disabled>Delete</button></div>
     <div class=edwrap>
-      <textarea id=ed placeholder='Open a document from the file tree…'></textarea>
-      <div class=cursors id=cursors></div>
+      <div class=gutter id=gutter>1</div>
+      <div class=edarea>
+        <pre class=hl id=hl></pre>
+        <textarea id=ed placeholder='Open a document from the file tree…' spellcheck=false></textarea>
+        <div class=cursors id=cursors></div>
+      </div>
     </div>
   </div>
   <div class=pdf>
-    <div class=bar><span class=muted id=pdfstatus>Press Compile ▶ to build the PDF</span></div>
+    <div class=bar><span class=muted id=pdfstatus>Press Compile ▶ to build the PDF</span><span class=grow></span>
+      <a id=pdfdl class=muted style='display:none' download='output.pdf'>⬇ PDF</a></div>
     <iframe id=pdfframe></iframe>
   </div>
 </div>
@@ -181,7 +190,7 @@ function handleEvent(event,args){
 }
 function renderPeers(){
   let bar='';
-  for(const id in peers){ const p=peers[id]; const ini=(p.name||'?').trim().split(/\s+/).map(s=>s[0]).join('').slice(0,2).toUpperCase()||'?'; bar+=`<span class=avatar title='${esc(p.name)}' style='background:${p.color}'>${esc(ini)}</span>`; }
+  for(const id in peers){ const p=peers[id]; const ini=(p.name||'?').trim().split(/\\s+/).map(s=>s[0]).join('').slice(0,2).toUpperCase()||'?'; bar+=`<span class=avatar title='${esc(p.name)}' style='background:${p.color}'>${esc(ini)}</span>`; }
   presence.innerHTML=bar;
   renderCursors();
 }
@@ -209,7 +218,22 @@ function sendCursor(){ if(!sock||!curId) return; const rc=Fleetex.posToRowCol(ed
 function sendCursorSoon(){ if(cursorTimer) return; cursorTimer=setTimeout(()=>{cursorTimer=null;sendCursor();},120); }
 setInterval(()=>{ const now=Date.now(); let ch=false; for(const id in peers){ if(now-peers[id].t>20000){ delete peers[id]; ch=true; } } if(ch) renderPeers(); },5000);
 ['keyup','click'].forEach(evt=>ed.addEventListener(evt,sendCursorSoon));
-ed.addEventListener('scroll',renderCursors);
+function highlightLatex(src){
+  var e=src.replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});
+  e=e.replace(/%[^\\n]*/g,function(m){return '<span class=tok-com>'+m+'</span>';});
+  e=e.replace(/\\\\[a-zA-Z@]+\\*?|\\\\[^a-zA-Z]/g,function(m){return '<span class=tok-cmd>'+m+'</span>';});
+  e=e.replace(/[{}]/g,function(m){return '<span class=tok-brc>'+m+'</span>';});
+  return e+'\\n';
+}
+function updateView(){
+  hl.innerHTML=highlightLatex(ed.value);
+  var n=ed.value.split('\\n').length, g=''; for(var i=1;i<=n;i++) g+=i+'\\n'; gutter.textContent=g;
+  gutter.scrollTop=ed.scrollTop;
+}
+ed.addEventListener('scroll',function(){ hl.scrollTop=ed.scrollTop; hl.scrollLeft=ed.scrollLeft; gutter.scrollTop=ed.scrollTop; renderCursors(); });
+ed.addEventListener('keydown',function(e){
+  if(e.key==='Tab'){ e.preventDefault(); const s=ed.selectionStart,en=ed.selectionEnd; ed.value=ed.value.slice(0,s)+'  '+ed.value.slice(en); ed.selectionStart=ed.selectionEnd=s+2; ed.dispatchEvent(new Event('input')); }
+});
 async function loadTree(){
   const d=await (await fetch(`/project/${pid}/tree`)).json();
   tree.innerHTML=d.entities.map(e=>`<div class=file data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')">${e.type==='doc'?'📄':'📎'} ${esc(e.path.slice(1))}</div>`).join('')||'<div class=muted>Empty</div>';
@@ -227,24 +251,24 @@ function openDoc(id,type){
     const snap=(lines||['']).join('\\n');
     doc=new Fleetex.CollabDoc(snap,version||0,function(u){sock.emit('applyOtUpdate',id,{op:u.op,v:u.v,meta:{}})});
     ed.value=snap;lastValue=snap;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · live';
-    requestPresence(); sendCursor(); renderCursors();
+    updateView(); requestPresence(); sendCursor(); renderCursors();
   });
 }
 async function httpOpen(id){ // fallback when socket unavailable
   const r=await fetch(`/project/${pid}/doc/${id}?plain=true`); if(!r.ok){cur.textContent='could not load';return}
-  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · offline';
+  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · offline';updateView();
 }
 ed.addEventListener('input',function(){
   if(applyingRemote) return;
   if(doc){ const op=Fleetex.makeOp(lastValue,ed.value); lastValue=ed.value; if(op.length) doc.submitLocal(op); }
   else lastValue=ed.value;
-  sendCursorSoon(); renderCursors();
+  updateView(); sendCursorSoon(); renderCursors();
 });
 function applyRemote(p){
   applyingRemote=true;
   const s=ed.selectionStart,e=ed.selectionEnd;
   const incoming=doc.onRemote(p.op,p.v);
-  ed.value=doc.snapshot;lastValue=doc.snapshot;
+  ed.value=doc.snapshot;lastValue=doc.snapshot;updateView();
   let ns=s,ne=e; for(const c of incoming){ns=Fleetex.OT.tp(ns,c,false);ne=Fleetex.OT.tp(ne,c,false)}
   ed.setSelectionRange(ns,ne);
   applyingRemote=false;
@@ -256,8 +280,8 @@ async function save(){
 }
 async function share(){
   const m=await (await fetch(`/project/${pid}/members`)).json();
-  const list=(m.members||[]).map(x=>`  • ${x.email||x.user_id} (${x.privilegeLevel})`).join('\n')||'  (just you)';
-  const email=prompt('Project members:\n'+list+'\n\nInvite a collaborator by email (they get edit access):');
+  const list=(m.members||[]).map(x=>`  • ${x.email||x.user_id} (${x.privilegeLevel})`).join('\\n')||'  (just you)';
+  const email=prompt('Project members:\\n'+list+'\\n\\nInvite a collaborator by email (they get edit access):');
   if(!email) return;
   const r=await fetch(`/project/${pid}/members`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:email.trim(),privilegeLevel:'readAndWrite'})});
   if(r.ok){ const d=await r.json(); alert('✓ Added '+d.member.email+' as an editor'); }
@@ -281,7 +305,7 @@ async function compile(){
     if(!r.ok){pdfstatus.textContent='compile request failed';return}
     const c=(await r.json()).compile||{};
     const pdf=(c.outputFiles||[]).find(f=>f.path==='output.pdf');
-    if(c.status==='success'&&pdf){ pdfframe.src=pdf.url+'?t='+Date.now(); pdfstatus.textContent='✓ compiled' }
+    if(c.status==='success'&&pdf){ pdfframe.src=pdf.url+'?t='+Date.now(); pdfstatus.textContent='✓ compiled'; pdfdl.href=pdf.url; pdfdl.style.display=''; }
     else{
       pdfstatus.textContent='✗ '+(c.status||'failed')+(c.error?' — '+c.error:'');
       const log=(c.outputFiles||[]).find(f=>f.path==='output.log');
