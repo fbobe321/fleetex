@@ -70,6 +70,8 @@ button:hover{filter:brightness(1.1)}
 .seg-d{background:#7a2b2b66;color:#ff9d9d;text-decoration:line-through}
 .histempty{padding:20px 14px;color:#8a90a2}
 .histpanel .foot{padding:12px 14px;border-top:1px solid #2a2e3a;display:flex;gap:8px;align-items:center}
+.histlegend{padding:6px 14px;font-size:11px;border-bottom:1px solid #23262f;display:flex;gap:12px;color:#8a90a2}
+.histlegend .seg-i,.histlegend .seg-d{padding:0 5px;border-radius:3px}
 """
 
 
@@ -168,7 +170,8 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <div class=bar><b>History</b><span class=muted id=histdoc></span><span class=grow></span>
     <button class=ghost onclick=toggleHistory()>✕</button></div>
   <div class=histlist id=histlist></div>
-  <div class=histdiff id=histdiff><div class=histempty>Select a version to see what changed.</div></div>
+  <div class=histlegend><span class=seg-i>added since</span><span class=seg-d>removed since</span><span class=grow></span>vs live buffer</div>
+  <div class=histdiff id=histdiff><div class=histempty>Select a version to compare it with your current text.</div></div>
   <div class=foot><span class=muted id=histsel>No version selected</span><span class=grow></span>
     <button id=restoreBtn onclick=restoreSelected() disabled>Restore this version</button></div>
 </div>
@@ -284,7 +287,7 @@ ed.addEventListener('input',function(){
   if(applyingRemote) return;
   if(doc){ const op=Fleetex.makeOp(lastValue,ed.value); lastValue=ed.value; if(op.length) doc.submitLocal(op); }
   else lastValue=ed.value;
-  updateView(); sendCursorSoon(); renderCursors();
+  updateView(); sendCursorSoon(); renderCursors(); liveDiffSoon();
 });
 function applyRemote(p){
   applyingRemote=true;
@@ -294,6 +297,7 @@ function applyRemote(p){
   let ns=s,ne=e; for(const c of incoming){ns=Fleetex.OT.tp(ns,c,false);ne=Fleetex.OT.tp(ne,c,false)}
   ed.setSelectionRange(ns,ne);
   applyingRemote=false;
+  liveDiffSoon();
 }
 async function save(){
   if(!curId)return;status.textContent='Saving…';
@@ -312,7 +316,7 @@ function refreshHistoryIfOpen(){ if(histpanel.classList.contains('open')) loadHi
 async function loadHistory(){
   histdoc.textContent=curId?fileLabel(curId):'';
   histSelected=null;restoreBtn.disabled=true;histsel.textContent='No version selected';
-  histdiff.innerHTML='<div class=histempty>Select a version to see what changed.</div>';
+  histdiff.innerHTML='<div class=histempty>Select a version to compare it with your current text.</div>';
   if(!curId){histlist.innerHTML='<div class=histempty>Open a document to see its history.</div>';return}
   const r=await fetch(`/project/${pid}/doc/${curId}/history`);
   if(!r.ok){histlist.innerHTML='<div class=histempty>Could not load history.</div>';return}
@@ -325,21 +329,32 @@ function renderHistList(versions){
 async function selectVersion(v){
   histSelected=v;
   document.querySelectorAll('.hitem').forEach(e=>e.classList.toggle('active',e.dataset.v===String(v)));
-  histsel.textContent='Version '+v;restoreBtn.disabled=false;
+  histsel.textContent='v'+v+' → your current text';restoreBtn.disabled=false;
   histdiff.innerHTML='<div class=histempty>Loading…</div>';
-  const r=await fetch(`/project/${pid}/doc/${curId}/history/diff?to=${v}`);
+  await fetchLiveDiff();
+}
+let liveDiffTimer=null;
+async function fetchLiveDiff(){
+  if(histSelected==null||!curId||typeof curId!=='string') return;
+  const r=await fetch(`/project/${pid}/doc/${curId}/history/diff-against/${histSelected}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:ed.value})});
   if(!r.ok){histdiff.innerHTML='<div class=histempty>Could not load diff.</div>';return}
   renderDiff((await r.json()).diff||[]);
 }
+// live: while a version is selected, re-diff it against the current buffer as you type
+function liveDiffSoon(){
+  if(histSelected==null||!histpanel.classList.contains('open')) return;
+  if(liveDiffTimer) clearTimeout(liveDiffTimer);
+  liveDiffTimer=setTimeout(()=>{liveDiffTimer=null;fetchLiveDiff();},400);
+}
 function renderDiff(segs){
-  if(!segs.length){histdiff.innerHTML='<div class=histempty>No changes in this version.</div>';return}
+  if(!segs.length){histdiff.innerHTML='<div class=histempty>Identical to your current text.</div>';return}
   let h='';
   for(const s of segs){
     if('u' in s) h+=esc(s.u);
     else if('i' in s) h+='<span class=seg-i>'+esc(s.i)+'</span>';
     else if('d' in s) h+='<span class=seg-d>'+esc(s.d)+'</span>';
   }
-  histdiff.innerHTML=h||'<div class=histempty>No changes in this version.</div>';
+  histdiff.innerHTML=h||'<div class=histempty>Identical to your current text.</div>';
 }
 async function restoreSelected(){
   if(histSelected==null||!curId) return;

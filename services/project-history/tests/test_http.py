@@ -64,6 +64,25 @@ async def test_diff_missing_doc_is_404(app):
     assert r.status == 404
 
 
+async def test_diff_against_current_buffer(app):
+    await _record(app, "p1", "d1", "Hello world")
+    # compare stored v1 against an arbitrary "current buffer"
+    r = await call_asgi(app, "POST", "/project/p1/doc/d1/diff-against/1", json={"content": "Hello brave world"})
+    assert r.status == 200
+    body = r.json
+    assert body["from"] == 1 and body["to"] == "current"
+    old = "".join(s.get("u", "") + s.get("d", "") for s in body["diff"])
+    new = "".join(s.get("u", "") + s.get("i", "") for s in body["diff"])
+    assert old == "Hello world" and new == "Hello brave world"
+    assert body["stats"]["added"] > 0
+
+
+async def test_diff_against_requires_content_and_existing_version(app):
+    await _record(app, "p1", "d1", "x")
+    assert (await call_asgi(app, "POST", "/project/p1/doc/d1/diff-against/1", json={})).status == 400
+    assert (await call_asgi(app, "POST", "/project/p1/doc/d1/diff-against/99", json={"content": "y"})).status == 404
+
+
 async def test_restore_pushes_and_records_new_version(app, doc_updater):
     await _record(app, "p1", "d1", "original", pathname="main.tex")
     await _record(app, "p1", "d1", "edited badly")

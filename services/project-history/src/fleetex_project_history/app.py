@@ -114,6 +114,27 @@ def build_app(settings: Settings | None = None, *, doc_updater: DocUpdaterClient
             "unified": diffmod.unified(from_content, to_content, from_label=f"v{from_version}", to_label=f"v{to_version}"),
         })
 
+    # ---- live diff: a stored version vs arbitrary (current-buffer) content - #
+    @app.post("/project/{project_id}/doc/{doc_id}/diff-against/{v}")
+    async def diff_against(project_id: str, doc_id: str, v: int, request: Request):
+        version = await _hm(request).get_doc_version(project_id, doc_id, v)
+        if version is None:
+            return Response(status_code=404)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict) or not isinstance(body.get("content"), str):
+            return JSONResponse({"message": "content (string) is required"}, status_code=400)
+        old, new = version["content"], body["content"]  # old = the stored version, new = current buffer
+        segments = diffmod.segment_diff(old, new)
+        return JSONResponse({
+            "from": v,
+            "to": "current",
+            "diff": segments,
+            "stats": diffmod.diff_stats(segments),
+        })
+
     # ---- restore --------------------------------------------------------- #
     @app.post("/project/{project_id}/doc/{doc_id}/restore/{v}")
     async def restore_version(project_id: str, doc_id: str, v: int, request: Request):

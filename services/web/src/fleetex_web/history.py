@@ -56,6 +56,19 @@ def register_history_routes(app: FastAPI, *, pm: ProjectManager, db, store, conf
         params = {k: request.query_params[k] for k in ("from", "to") if k in request.query_params}
         return _forward(await history.get(f"/project/{project_id}/doc/{doc_id}/diff", params=params))
 
+    # ---- live diff: a version vs the caller's current buffer ------------- #
+    @app.post("/project/{project_id}/doc/{doc_id}/history/diff-against/{v}")
+    async def doc_diff_against(project_id: str, doc_id: str, v: int, request: Request):
+        _loaded, err = await _access(request, project_id, can_read)
+        if err:
+            return err
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        content = body.get("content") if isinstance(body, dict) else None
+        return _forward(await history.post(f"/project/{project_id}/doc/{doc_id}/diff-against/{v}", json={"content": content or ""}))
+
     # ---- full content of a version --------------------------------------- #
     @app.get("/project/{project_id}/history/version/{v}")
     async def version_content(project_id: str, v: int, request: Request):

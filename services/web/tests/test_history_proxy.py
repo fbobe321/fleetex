@@ -32,6 +32,8 @@ class FakeHistory:
 
     async def post(self, path, json=None):
         self.calls.append(("POST", path, json))
+        if "/diff-against/" in path:
+            return httpx.Response(200, json={"from": 1, "to": "current", "diff": [{"u": "a "}, {"i": "z"}], "stats": {"added": 1, "removed": 0}})
         return httpx.Response(201, json={"created": True, "version": {"version": 3, "source": (json or {}).get("source")}})
 
 
@@ -76,6 +78,18 @@ async def test_diff_forwards_to_query(happ, db, config, history):
     r = await call_asgi(happ, "GET", f"/project/{pid}/doc/{did}/history/diff?to=2", headers=await _session(happ, config, owner))
     assert r.status == 200 and r.json["diff"][1] == {"d": "b"}
     assert ("GET", f"/project/{pid}/doc/{did}/diff", {"to": "2"}) in history.calls
+
+
+async def test_diff_against_forwards_buffer(happ, db, config, history):
+    owner = await _user(db, "owner@x.com")
+    project = await happ.state.projects.create_basic(str(owner["_id"]), "P")
+    pid, did = str(project["_id"]), str(project["rootDoc_id"])
+    r = await call_asgi(happ, "POST", f"/project/{pid}/doc/{did}/history/diff-against/1",
+                        headers=await _session(happ, config, owner), json={"content": "a z"})
+    assert r.status == 200 and r.json["to"] == "current"
+    method, path, payload = history.calls[-1]
+    assert method == "POST" and path == f"/project/{pid}/doc/{did}/diff-against/1"
+    assert payload == {"content": "a z"}
 
 
 async def test_version_content_proxied(happ, db, config, history):
