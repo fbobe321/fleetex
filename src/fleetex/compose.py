@@ -7,10 +7,12 @@ this keeps the launcher dependency-free.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
-from typing import Sequence
+from typing import Mapping, Sequence
 
+from . import REPO_URL
 from .config import Config
 
 
@@ -23,14 +25,40 @@ def _docker_available() -> bool:
 
 
 def _compose_base(cfg: Config) -> list[str]:
+    if cfg.is_python:
+        project, compose_file = cfg.python_project_name, cfg.python_compose_path
+    else:
+        project, compose_file = cfg.project_name, cfg.compose_path
     return [
         "docker",
         "compose",
         "--project-name",
-        cfg.project_name,
+        project,
         "--file",
-        str(cfg.compose_path),
+        str(compose_file),
     ]
+
+
+def _ensure_python_source(cfg: Config) -> None:
+    """Make sure a fleetex checkout with a docker-compose.yml is available."""
+    src = cfg.effective_source_dir
+    if cfg.python_compose_path.is_file():
+        return
+    if cfg.source_dir:
+        raise DockerError(
+            f"no docker-compose.yml under the configured source dir {src}. "
+            "Point `fleetex config --source` at a Fleetex checkout."
+        )
+    if shutil.which("git") is None:
+        raise DockerError(
+            "git is required to fetch the Fleetex Python stack (or set "
+            "`fleetex config --source <path>` to a local checkout)."
+        )
+    print(f"Fetching the Fleetex Python stack into {src} ...")
+    src.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(["git", "clone", "--depth", "1", REPO_URL, str(src)])
+    if proc.returncode != 0 or not cfg.python_compose_path.is_file():
+        raise DockerError(f"failed to fetch the Fleetex source into {src}")
 
 
 def ensure_ready(cfg: Config) -> None:
@@ -51,13 +79,24 @@ def ensure_ready(cfg: Config) -> None:
             "Compose plugin: https://docs.docker.com/compose/install/\n"
             + (probe.stderr or probe.stdout).strip()
         )
-    cfg.write_runtime_files()
+    if cfg.is_python:
+        _ensure_python_source(cfg)
+        cfg.write_runtime_files()  # just ensures home dir exists
+    else:
+        cfg.write_runtime_files()
 
 
-def run(cfg: Config, args: Sequence[str], *, check: bool = True) -> int:
+def run(
+    cfg: Config,
+    args: Sequence[str],
+    *,
+    check: bool = True,
+    extra_env: Mapping[str, str] | None = None,
+) -> int:
     """Run a ``docker compose`` subcommand, streaming output to the terminal."""
     cmd = _compose_base(cfg) + list(args)
-    proc = subprocess.run(cmd)
+    env = {**os.environ, **extra_env} if extra_env else None
+    proc = subprocess.run(cmd, env=env)
     if check and proc.returncode != 0:
         raise DockerError(
             f"`{' '.join(cmd)}` exited with status {proc.returncode}"

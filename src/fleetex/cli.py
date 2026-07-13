@@ -41,6 +41,19 @@ def _load(args: argparse.Namespace) -> Config:
 def cmd_up(args: argparse.Namespace) -> int:
     cfg = _load(args)
     ensure_ready(cfg)
+    if cfg.is_python:
+        # Build our own service images from source; the browser reaches the
+        # live-sync websocket at advertise_host, so pass it through.
+        up_args = ["up", "--build"]
+        if not args.foreground:
+            up_args.append("--detach")
+        run(cfg, up_args, extra_env={"WEBSOCKET_URL": cfg.websocket_url})
+        if not args.foreground:
+            print(f"\nFleetex (Python stack) is starting at {cfg.web_url}")
+            print("First run builds the images — the clsi service ships TeX Live,")
+            print("so it can take several minutes. Subsequent starts are fast.")
+            print("Open the URL and click 'Create account' — no admin step needed.")
+        return 0
     if not args.no_pull:
         print(f"Pulling images ({cfg.sharelatex_image} + mongo + redis)...")
         run(cfg, ["pull"], check=False)
@@ -58,7 +71,7 @@ def cmd_up(args: argparse.Namespace) -> int:
 
 def cmd_down(args: argparse.Namespace) -> int:
     cfg = _load(args)
-    if not cfg.compose_path.is_file():
+    if not cfg.active_compose_path().is_file():
         return _err("nothing to stop (no compose file). Run `fleetex up` first.")
     ensure_ready(cfg)
     down_args = ["down"]
@@ -79,7 +92,7 @@ def cmd_down(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     cfg = _load(args)
-    if not cfg.compose_path.is_file():
+    if not cfg.active_compose_path().is_file():
         print("Not configured yet. Run `fleetex up` to create and start the stack.")
         return 0
     ensure_ready(cfg)
@@ -105,13 +118,17 @@ def cmd_restart(args: argparse.Namespace) -> int:
 
 def cmd_open(args: argparse.Namespace) -> int:
     cfg = _load(args)
-    print(f"Opening {cfg.site_url}")
-    webbrowser.open(cfg.site_url)
+    print(f"Opening {cfg.web_url}")
+    webbrowser.open(cfg.web_url)
     return 0
 
 
 def cmd_create_admin(args: argparse.Namespace) -> int:
     cfg = _load(args)
+    if cfg.is_python:
+        print("The Python stack uses open self-registration — there is no separate")
+        print(f"admin step. Open {cfg.web_url} and click 'Create account'.")
+        return 0
     ensure_ready(cfg)
     # Upstream ships a create-user script inside the sharelatex container.
     print(f"Creating admin user {args.email} ...")
@@ -161,6 +178,9 @@ def cmd_config(args: argparse.Namespace) -> int:
         "redis_image",
         "data_dir",
         "project_name",
+        "edition",
+        "source_dir",
+        "advertise_host",
     ):
         val = getattr(args, attr, None)
         if val is not None:
@@ -173,25 +193,36 @@ def cmd_config(args: argparse.Namespace) -> int:
         cfg.save()
         cfg.write_runtime_files()
         print(f"Updated config: {cfg.config_path}")
-        print(f"Re-rendered compose: {cfg.compose_path}")
+        if not cfg.is_python:
+            print(f"Re-rendered compose: {cfg.compose_path}")
         print("Run `fleetex up` (or `restart`) to apply.")
     else:
         # No flags: show current config.
         print(f"home:            {cfg.home}")
-        print(f"app_name:        {cfg.app_name}")
-        print(f"http_port:       {cfg.http_port}")
-        print(f"site_url:        {cfg.site_url}")
-        print(f"sharelatex_image:{cfg.sharelatex_image}")
-        print(f"mongo_image:     {cfg.mongo_image}")
-        print(f"redis_image:     {cfg.redis_image}")
-        print(f"data_dir:        {cfg.data_path}")
+        print(f"edition:         {cfg.edition}")
+        if cfg.is_python:
+            print(f"web_url:         {cfg.web_url}")
+            print(f"advertise_host:  {cfg.advertise_host}")
+            print(f"source_dir:      {cfg.effective_source_dir}")
+        else:
+            print(f"app_name:        {cfg.app_name}")
+            print(f"http_port:       {cfg.http_port}")
+            print(f"site_url:        {cfg.site_url}")
+            print(f"sharelatex_image:{cfg.sharelatex_image}")
+            print(f"mongo_image:     {cfg.mongo_image}")
+            print(f"redis_image:     {cfg.redis_image}")
+            print(f"data_dir:        {cfg.data_path}")
     return 0
 
 
 def cmd_version(args: argparse.Namespace) -> int:
     cfg = _load(args)
-    print(f"fleetex launcher {__version__}")
-    print(f"targets image: {cfg.sharelatex_image}")
+    if cfg.is_python:
+        print(f"fleetex launcher {__version__} (python edition)")
+        print(f"stack source: {cfg.effective_source_dir}")
+    else:
+        print(f"fleetex launcher {__version__} (ce edition)")
+        print(f"targets image: {cfg.sharelatex_image}")
     probe = capture(cfg, ["version"])
     if probe.returncode == 0:
         print(probe.stdout.strip().splitlines()[0] if probe.stdout else "")
@@ -257,6 +288,19 @@ def build_parser() -> argparse.ArgumentParser:
     cf.add_argument("--redis-image", dest="redis_image")
     cf.add_argument("--data-dir", dest="data_dir")
     cf.add_argument("--project-name", dest="project_name")
+    cf.add_argument(
+        "--edition",
+        dest="edition",
+        choices=["ce", "python"],
+        help="ce = stock Overleaf CE image; python = Fleetex's own reimplementation",
+    )
+    cf.add_argument("--source", dest="source_dir", help="Path to a Fleetex checkout (python edition)")
+    cf.add_argument(
+        "--advertise-host",
+        dest="advertise_host",
+        help="Host/IP browsers use to reach the stack (python edition; use the "
+        "server's LAN IP for remote access)",
+    )
     cf.set_defaults(func=cmd_config)
 
     vs = sub.add_parser("version", help="Show launcher and Docker versions")

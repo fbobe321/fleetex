@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from string import Template
 
-from . import MONGO_IMAGE, REDIS_IMAGE, SHARELATEX_IMAGE
+from . import MONGO_IMAGE, PYTHON_PROJECT_NAME, REDIS_IMAGE, SHARELATEX_IMAGE
 
 try:
     from importlib.resources import files as _resource_files
@@ -48,11 +48,56 @@ class Config:
     redis_image: str = REDIS_IMAGE
     # Path to the data directory; if relative, resolved against ``home``.
     data_dir: str = "data"
+    # "ce"     -> run stock Overleaf Community Edition (the sharelatex image).
+    # "python" -> run Fleetex's own Python reimplementation via its compose file.
+    edition: str = "ce"
+    # For the python edition: a local checkout of the fleetex repo. When empty,
+    # the launcher clones it into ``<home>/fleetex-src``.
+    source_dir: str = ""
+    # For the python edition: the host/IP browsers use to reach the stack. The
+    # browser opens the live-sync websocket to this host directly, so on a LAN it
+    # must be the server's address, not localhost.
+    advertise_host: str = "localhost"
     _home: Path = field(default=None, repr=False, compare=False)  # type: ignore[assignment]
 
     @property
     def home(self) -> Path:
         return self._home if self._home is not None else default_home()
+
+    # -- edition helpers --------------------------------------------------
+    @property
+    def is_python(self) -> bool:
+        return self.edition == "python"
+
+    @property
+    def effective_source_dir(self) -> Path:
+        if self.source_dir:
+            return Path(self.source_dir).expanduser().resolve()
+        return (self.home / "fleetex-src").resolve()
+
+    @property
+    def python_compose_path(self) -> Path:
+        return self.effective_source_dir / "docker-compose.yml"
+
+    @property
+    def python_project_name(self) -> str:
+        return PYTHON_PROJECT_NAME
+
+    def active_compose_path(self) -> Path:
+        """The compose file the active edition operates on."""
+        return self.python_compose_path if self.is_python else self.compose_path
+
+    @property
+    def websocket_url(self) -> str:
+        """URL the browser opens the live-sync websocket to (python edition)."""
+        return f"http://{self.advertise_host}:3026"
+
+    @property
+    def web_url(self) -> str:
+        """The URL to show the user for the running stack."""
+        if self.is_python:
+            return f"http://{self.advertise_host}:3000"
+        return self.site_url
 
     @property
     def data_path(self) -> Path:
@@ -107,8 +152,14 @@ class Config:
         return Template(template_text).safe_substitute(self._substitutions())
 
     def write_runtime_files(self) -> None:
-        """Materialize compose file, data dirs, and the mongo init script."""
+        """Materialize compose file, data dirs, and the mongo init script.
+
+        The python edition drives the repo's own docker-compose.yml, so there is
+        no CE template to render — just ensure the home dir exists.
+        """
         self.home.mkdir(parents=True, exist_ok=True)
+        if self.is_python:
+            return
         data = self.data_path
         for sub in ("sharelatex", "mongo", "redis"):
             (data / sub).mkdir(parents=True, exist_ok=True)

@@ -42,6 +42,31 @@ Then open **http://localhost:3000** → register → create/open a project. Open
 second browser tab (or share with someone) editing the same document — changes
 sync live. (Ports published to the host: `3000` web, `3026` real-time websocket.)
 
+### …or drive it with the `fleetex` launcher (python edition)
+
+The `fleetex` CLI can run **this** reimplementation instead of the stock Overleaf
+CE image. Point it at a checkout and switch editions:
+
+```bash
+fleetex config --edition python --source /path/to/fleetex
+fleetex up            # builds + starts the Python stack (project: fleetex-app)
+fleetex status        # shows the 10 services
+fleetex down          # stops it
+```
+
+For LAN/remote access, tell it the host address browsers should use (the live-sync
+websocket connects there directly):
+
+```bash
+fleetex config --advertise-host 192.168.50.21   # your server's LAN IP
+fleetex up                                        # → http://192.168.50.21:3000
+```
+
+No `create-admin` step — the Python stack uses open self-registration. With no
+`--source`, the launcher clones the repo automatically. The `ce` edition
+(stock Overleaf CE on :8080) remains the default; switch back with
+`fleetex config --edition ce`.
+
 ---
 
 ## Why this exists
