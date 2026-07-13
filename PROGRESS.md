@@ -285,6 +285,17 @@ compose. **21 service tests + 2 document-updater hook tests. Verified on real
 Mongo:** timeline/dedup/pathname-carry/diff/restore/scoped-purge, and the
 document-updater→project-history HTTP contract end-to-end.
 
+### History UI in the editor ✅
+`web/history.py` proxies the browser's history calls to project-history (single
+origin, cookie-authorized: reads need read access, recording needs write). Save
+(⌘/Ctrl+S) records a version. The editor has a slide-in **History panel**
+(🕘 History): lists the open doc's versions, click one to see a color-coded
+"what changed in this version" diff (server `{u|i|d}` segments), and **Restore**
+loads that version's content back through the *verified OT edit path*
+(`makeOp`+`submitLocal`) so every connected client converges — no setDoc
+divergence. 6 web proxy tests. **Verified end-to-end through the real web proxy →
+real project-history → real Mongo:** record, timeline, diff, restore-fetch.
+
 ## Next session should do
 Phases 0-8 COMPLETE + live-collab + compose + compile + presence. Remaining work is polish/hardening, user's
 choice:

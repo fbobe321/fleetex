@@ -24,6 +24,7 @@ from .compile import ClsiManager, register_compile_routes
 from .editor import DocstoreClient, register_editor_routes
 from .file_tree import EditorEventsPublisher, FilestoreClient, FileTreeManager, register_file_tree_routes
 from .frontend import register_frontend_routes
+from .history import HistoryProxy, register_history_routes
 from .passwords import verify_password
 from .projects import ProjectManager, register_project_routes
 from .security import register_csrf_guard
@@ -49,7 +50,7 @@ def _check_basic_auth(request: Request, config: WebConfig) -> bool:
     return user == config.web_api_user and password == config.web_api_password
 
 
-def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=None, filestore=None, events=None, clsi=None) -> FastAPI:
+def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=None, filestore=None, events=None, clsi=None, history=None) -> FastAPI:
     config = config or WebConfig.from_env()
     settings = Settings.from_env("web", default_port=config.port, env={})
     app = create_app(settings, connect_mongo=False, connect_redis=False, status_text="web is alive")
@@ -165,9 +166,13 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=
     events = events if events is not None else EditorEventsPublisher(redis)
     ft = FileTreeManager(db, docstore, filestore, events)
     app.state.file_tree = ft
-    # Collaborator routes register BEFORE file-tree: the literal `/members/:id`
-    # path must win over file-tree's `/{entity_type}/:id` catch-all.
+    # Collaborator + history routes register BEFORE file-tree: their literal path
+    # segments (`/members/:id`, `/doc/:id/history…`) must win over file-tree's
+    # `/{entity_type}/:id` catch-all.
     register_collaborator_routes(app, pm=projects, db=db, store=store, config=config)
+    history = history if history is not None else HistoryProxy(config.project_history_url)
+    app.state.history = history
+    register_history_routes(app, pm=projects, db=db, store=store, config=config, history=history)
     register_file_tree_routes(app, pm=projects, db=db, store=store, config=config, ft=ft)
 
     clsi = clsi if clsi is not None else ClsiManager(config.clsi_url, config.document_updater_url, config.filestore_url)

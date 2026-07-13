@@ -57,6 +57,19 @@ button:hover{filter:brightness(1.1)}
 .pdf{display:flex;flex-direction:column;border-left:1px solid #2a2e3a;min-width:0}
 .pdf .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
 .pdf iframe{flex:1;border:0;background:#fff}
+.histpanel{position:fixed;top:0;right:0;width:380px;max-width:90vw;height:100vh;background:#1b1e27;border-left:1px solid #2a2e3a;box-shadow:-8px 0 30px #0007;display:none;flex-direction:column;z-index:50}
+.histpanel.open{display:flex}
+.histpanel .bar{display:flex;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid #2a2e3a}
+.histpanel .bar b{font-size:15px}
+.histlist{overflow:auto;max-height:40%;border-bottom:1px solid #2a2e3a}
+.hitem{padding:10px 14px;border-bottom:1px solid #23262f;cursor:pointer}
+.hitem:hover{background:#2a2e3a}.hitem.active{background:#2f6fed33}
+.hitem .hv{font-weight:600}.hitem .hmeta{color:#8a90a2;font-size:12px}
+.histdiff{flex:1;overflow:auto;padding:14px;font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word}
+.seg-i{background:#1f6f3f66;color:#8ff0b0;text-decoration:none}
+.seg-d{background:#7a2b2b66;color:#ff9d9d;text-decoration:line-through}
+.histempty{padding:20px 14px;color:#8a90a2}
+.histpanel .foot{padding:12px 14px;border-top:1px solid #2a2e3a;display:flex;gap:8px;align-items:center}
 """
 
 
@@ -126,6 +139,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <span class=muted id=status></span>
   <button id=compileBtn onclick=compile()>Compile ▶</button>
   <button class=ghost onclick=share()>Share</button>
+  <button class=ghost onclick=toggleHistory()>🕘 History</button>
   <button class=ghost onclick=newDoc()>New doc</button>
   <button class=ghost onclick=fileinput.click()>Upload</button>
   <input type=file id=fileinput style=display:none onchange=doUpload()></div>
@@ -149,6 +163,14 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
       <a id=pdfdl class=muted style='display:none' download='output.pdf'>⬇ PDF</a></div>
     <iframe id=pdfframe></iframe>
   </div>
+</div>
+<div class=histpanel id=histpanel>
+  <div class=bar><b>History</b><span class=muted id=histdoc></span><span class=grow></span>
+    <button class=ghost onclick=toggleHistory()>✕</button></div>
+  <div class=histlist id=histlist></div>
+  <div class=histdiff id=histdiff><div class=histempty>Select a version to see what changed.</div></div>
+  <div class=foot><span class=muted id=histsel>No version selected</span><span class=grow></span>
+    <button id=restoreBtn onclick=restoreSelected() disabled>Restore this version</button></div>
 </div>
 <script src="/assets/collab.js"></script>
 <script>
@@ -251,12 +273,12 @@ function openDoc(id,type){
     const snap=(lines||['']).join('\\n');
     doc=new Fleetex.CollabDoc(snap,version||0,function(u){sock.emit('applyOtUpdate',id,{op:u.op,v:u.v,meta:{}})});
     ed.value=snap;lastValue=snap;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · live';
-    updateView(); requestPresence(); sendCursor(); renderCursors();
+    updateView(); requestPresence(); sendCursor(); renderCursors(); refreshHistoryIfOpen();
   });
 }
 async function httpOpen(id){ // fallback when socket unavailable
   const r=await fetch(`/project/${pid}/doc/${id}?plain=true`); if(!r.ok){cur.textContent='could not load';return}
-  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · offline';updateView();
+  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · offline';updateView();refreshHistoryIfOpen();
 }
 ed.addEventListener('input',function(){
   if(applyingRemote) return;
@@ -277,6 +299,59 @@ async function save(){
   if(!curId)return;status.textContent='Saving…';
   const r=await fetch(`/project/${pid}/doc/${curId}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:ed.value})});
   status.textContent=r.ok?'Saved ✓':'Save failed';setTimeout(()=>status.textContent='',1500);
+  if(r.ok) recordVersion('save');
+}
+// ---- version history ---------------------------------------------------- #
+let histSelected=null;
+function recordVersion(source){
+  if(!curId||typeof curId!=='string') return;
+  fetch(`/project/${pid}/doc/${curId}/history/version`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:ed.value,source:source||'save'})}).then(refreshHistoryIfOpen).catch(()=>{});
+}
+function toggleHistory(){ if(histpanel.classList.toggle('open')) loadHistory(); }
+function refreshHistoryIfOpen(){ if(histpanel.classList.contains('open')) loadHistory(); }
+async function loadHistory(){
+  histdoc.textContent=curId?fileLabel(curId):'';
+  histSelected=null;restoreBtn.disabled=true;histsel.textContent='No version selected';
+  histdiff.innerHTML='<div class=histempty>Select a version to see what changed.</div>';
+  if(!curId){histlist.innerHTML='<div class=histempty>Open a document to see its history.</div>';return}
+  const r=await fetch(`/project/${pid}/doc/${curId}/history`);
+  if(!r.ok){histlist.innerHTML='<div class=histempty>Could not load history.</div>';return}
+  renderHistList(((await r.json()).versions)||[]);
+}
+function renderHistList(versions){
+  if(!versions.length){histlist.innerHTML='<div class=histempty>No saved versions yet. Press Save (⌘/Ctrl+S) to create one.</div>';return}
+  histlist.innerHTML=versions.map(v=>`<div class=hitem data-v='${v.version}' onclick='selectVersion(${v.version})'><div class=hv>v${v.version} · ${esc(v.source||'save')}</div><div class=hmeta>${v.ts?new Date(v.ts).toLocaleString():''}</div></div>`).join('');
+}
+async function selectVersion(v){
+  histSelected=v;
+  document.querySelectorAll('.hitem').forEach(e=>e.classList.toggle('active',e.dataset.v===String(v)));
+  histsel.textContent='Version '+v;restoreBtn.disabled=false;
+  histdiff.innerHTML='<div class=histempty>Loading…</div>';
+  const r=await fetch(`/project/${pid}/doc/${curId}/history/diff?to=${v}`);
+  if(!r.ok){histdiff.innerHTML='<div class=histempty>Could not load diff.</div>';return}
+  renderDiff((await r.json()).diff||[]);
+}
+function renderDiff(segs){
+  if(!segs.length){histdiff.innerHTML='<div class=histempty>No changes in this version.</div>';return}
+  let h='';
+  for(const s of segs){
+    if('u' in s) h+=esc(s.u);
+    else if('i' in s) h+='<span class=seg-i>'+esc(s.i)+'</span>';
+    else if('d' in s) h+='<span class=seg-d>'+esc(s.d)+'</span>';
+  }
+  histdiff.innerHTML=h||'<div class=histempty>No changes in this version.</div>';
+}
+async function restoreSelected(){
+  if(histSelected==null||!curId) return;
+  if(!confirm('Restore version '+histSelected+'? This replaces the current document content.')) return;
+  const r=await fetch(`/project/${pid}/history/version/${histSelected}`);
+  if(!r.ok){alert('Could not load that version');return}
+  const content=(await r.json()).content||'';
+  if(doc){ // live: replay as a normal OT edit so every connected client converges
+    const op=Fleetex.makeOp(lastValue,content); ed.value=content; lastValue=content; if(op.length) doc.submitLocal(op); updateView();
+  } else { ed.value=content;lastValue=content;updateView();await save(); }
+  status.textContent='Restored v'+histSelected;setTimeout(()=>status.textContent='',2500);
+  recordVersion('restore');
 }
 async function share(){
   const m=await (await fetch(`/project/${pid}/members`)).json();
