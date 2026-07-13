@@ -195,6 +195,20 @@ async def test_clone_copies_tree_with_new_ids(app, db, config):
     assert clone_doc != src_doc
 
 
+async def test_join_serializes_rootfolder_tree(app, db, config):
+    # regression: the join view returned the rootFolder tree with ObjectId ids,
+    # which broke JSON serialization (500). Verify a real created project joins OK.
+    import base64
+    owner = await _user(db, "owner@x.com")
+    project = await app.state.projects.create_basic(str(owner["_id"]), "WithTree")
+    basic = {"authorization": "Basic " + base64.b64encode(b"overleaf:password").decode()}
+    r = await call_asgi(app, "POST", f"/project/{project['_id']}/join", headers=basic, json={"userId": str(owner["_id"])})
+    assert r.status == 200
+    root = r.json["project"]["rootFolder"][0]
+    assert isinstance(root["_id"], str)  # ids stringified
+    assert isinstance(root["docs"][0]["_id"], str) and root["docs"][0]["name"] == "main.tex"
+
+
 async def test_missing_project_404(app, db, config):
     owner = await _user(db, "owner@x.com")
     r = await call_asgi(app, "POST", f"/project/{ObjectId()}/rename", headers=await _session(app, config, owner), json={"newProjectName": "X"})

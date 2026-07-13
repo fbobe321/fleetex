@@ -182,8 +182,28 @@ Fleetex is a functionally-complete, mostly-Python Overleaf. What remains Node:
 NOTHING structural — project-history (undo/version-history) is the last upstream
 service not ported, and it's optional. The frontend bundle is a fresh minimal one.
 
+## LIVE-COLLAB WIRED ✅ (verified end-to-end)
+Browser multi-user editing works. `services/web/collab_js.py` = browser OT client
+(text OT ported to JS — **cross-checked byte-identical to the Python engine over
+5000 random transforms via node**) + minimal Socket.IO-v4 client over WebSocket +
+ShareJS inflight/buffer CollabDoc. Editor page (`frontend.py`) uses it. Added the
+missing server piece: **real-time now subscribes to `applied-ops`/`editor-events`**
+(`pubsub.py`) and document-updater starts its BLPOP dispatchers.
+- **Verified with real Mongo+Redis+docstore+document-updater+real-time+web + two
+  socket.io clients:** concurrent edits (A prepends, B appends from same version)
+  CONVERGE — clients + server all agree.
+- **3 real bugs the live run caught (mocks couldn't):**
+  1. kit `create_app` used a `lifespan`, so FastAPI IGNORED `@app.on_event` →
+     dispatchers + pubsub never started. Fixed: kit `on_startup` hook.
+  2. web `/join` 500'd — `build_project_view` returned the rootFolder tree with
+     ObjectId ids (not JSON-serializable). Fixed: `authorization.json_safe`.
+  3. document-updater dispatchers dropped updates on redis socket-timeout during
+     blocking BLPOP. Fixed: dedicated blocking redis connection + finite timeout.
+- **Demo run:** see "How to run the stack" above + set WEBSOCKET_URL=http://<rt-host>:3026
+  for web, and run real-time (:3026) + document-updater (:3003) too.
+
 ## Next session should do
-Phases 0-8 of the ROADMAP are COMPLETE. Remaining work is polish/hardening, user's
+Phases 0-8 of the ROADMAP are COMPLETE + live-collab wired. Remaining work is polish/hardening, user's
 choice:
 - **project-history** service (the one unported upstream service: version history/
   undo). Optional; similar hard-core caution as OT.

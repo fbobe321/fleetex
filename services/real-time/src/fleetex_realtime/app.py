@@ -77,8 +77,17 @@ def _register_sio_handlers(sio: socketio.AsyncServer, server: RealtimeServer) ->
 
 def build_app(config: RealtimeConfig | None = None, *, redis=None, web_api=None, du=None) -> FastAPI:
     config = config or RealtimeConfig.from_env()
+
+    async def _start_pubsub(app):
+        from .pubsub import start_pubsub
+
+        app.state.pubsub_task = start_pubsub(app.state.redis, app.state.server)
+
     settings = Settings.from_env("real-time", default_port=config.port, env={})
-    app = create_app(settings, connect_mongo=False, connect_redis=False, status_text="real-time is alive")
+    app = create_app(
+        settings, connect_mongo=False, connect_redis=False,
+        status_text="real-time is alive", on_startup=[_start_pubsub],
+    )
 
     redis = redis if redis is not None else aioredis.from_url(config.redis_url, decode_responses=True)
     web_api = web_api or WebApiManager(config.web_url, config.web_api_user, config.web_api_password)

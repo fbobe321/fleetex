@@ -34,8 +34,15 @@ def create_app(
     connect_mongo: bool = True,
     connect_redis: bool = True,
     status_text: str | None = None,
+    on_startup: list | None = None,
 ) -> FastAPI:
+    """``on_startup`` is a list of async callables ``fn(app)`` run during lifespan
+    startup — use it to launch background workers (dispatchers, pub/sub subscribers).
+    NOTE: FastAPI ignores ``@app.on_event`` when a lifespan is set, so background
+    tasks MUST be registered here. (Not triggered by httpx ASGITransport in tests.)
+    """
     logger = configure_logging(settings.service_name, settings.log_level)
+    on_startup = on_startup or []
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -44,6 +51,8 @@ def create_app(
             app.state.db = get_database(app.state.mongo, settings.mongo_url)
         if connect_redis:
             app.state.redis = create_redis(settings.redis_url)
+        for callback in on_startup:
+            await callback(app)
         logger.info("service started", extra={"port": settings.port})
         try:
             yield

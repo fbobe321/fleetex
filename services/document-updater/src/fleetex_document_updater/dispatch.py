@@ -16,7 +16,9 @@ async def run_dispatcher(redis, updater, shard: int) -> None:
     key = "pending-updates-list" if shard == 0 else f"pending-updates-list-{shard}"
     while True:
         try:
-            result = await redis.blpop(key, timeout=0)
+            # finite timeout so a blocked read never fights the socket timeout;
+            # on None (nothing queued) just loop and block again.
+            result = await redis.blpop(key, timeout=5)
             if not result:
                 continue
             _list_name, doc_key = result

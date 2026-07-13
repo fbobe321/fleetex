@@ -14,10 +14,23 @@ from .redis_manager import DOC_OPS_TTL, RedisManager
 from .update_manager import AppliedOpsPublisher, DocumentUpdater
 
 
-def build_app(config: DocUpdaterConfig | None = None, *, redis=None, persistence=None) -> FastAPI:
+def build_app(config: DocUpdaterConfig | None = None, *, redis=None, persistence=None, with_workers: bool = False) -> FastAPI:
     config = config or DocUpdaterConfig.from_env()
+
+    async def _start_workers(app):
+        from .dispatch import start_dispatchers
+
+        # Dedicated connection pool for the blocking BLPOP loops, so they never
+        # contend with the request/publish redis operations.
+        blocking_redis = aioredis.from_url(config.redis_url, decode_responses=True, socket_timeout=None)
+        app.state.dispatchers = start_dispatchers(blocking_redis, app.state.updater, config.dispatcher_count)
+
     settings = Settings.from_env("document-updater", default_port=config.port, env={})
-    app = create_app(settings, connect_mongo=False, connect_redis=False, status_text="document-updater is alive")
+    app = create_app(
+        settings, connect_mongo=False, connect_redis=False,
+        status_text="document-updater is alive",
+        on_startup=[_start_workers] if with_workers else None,
+    )
 
     redis = redis if redis is not None else aioredis.from_url(config.redis_url, decode_responses=True)
     persistence = persistence or PersistenceManager(config.docstore_url)

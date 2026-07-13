@@ -6,6 +6,10 @@ and ProjectEditorHandler.buildProjectModelView (a faithful subset).
 
 from __future__ import annotations
 
+from datetime import datetime
+
+from bson import ObjectId
+
 OWNER = "owner"
 READ_AND_WRITE = "readAndWrite"
 REVIEW = "review"
@@ -79,6 +83,20 @@ def is_restricted_user(privilege: str | None, token_member: bool, invited_member
     return False
 
 
+def json_safe(value):
+    """Recursively convert ObjectId->str and datetime->iso (the rootFolder tree
+    carries ObjectId ids that must be stringified before JSON serialization)."""
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [json_safe(v) for v in value]
+    return value
+
+
 def build_project_view(project: dict, owner: dict | None, restricted: bool) -> dict:
     owner_view = {"_id": str(project.get("owner_ref"))}
     if owner and not restricted:
@@ -93,7 +111,7 @@ def build_project_view(project: dict, owner: dict | None, restricted: bool) -> d
         "name": project.get("name", ""),
         "rootDoc_id": str(project["rootDoc_id"]) if project.get("rootDoc_id") else None,
         "mainBibliographyDoc_id": str(project["mainBibliographyDoc_id"]) if project.get("mainBibliographyDoc_id") else None,
-        "rootFolder": project.get("rootFolder", []),
+        "rootFolder": json_safe(project.get("rootFolder", [])),
         "publicAccesLevel": project.get("publicAccesLevel", "private"),
         "dropboxEnabled": False,
         "compiler": project.get("compiler", "pdflatex"),
@@ -102,8 +120,8 @@ def build_project_view(project: dict, owner: dict | None, restricted: bool) -> d
         "deletedByExternalDataSource": project.get("deletedByExternalDataSource", False),
         "imageName": project.get("imageName"),
         "owner": owner_view,
-        "members": [] if restricted else project.get("members", []),
-        "invites": [] if restricted else project.get("invites", []),
+        "members": [] if restricted else json_safe(project.get("members", [])),
+        "invites": [] if restricted else json_safe(project.get("invites", [])),
         "features": project.get("features") or _DEFAULT_FEATURES,
     }
 

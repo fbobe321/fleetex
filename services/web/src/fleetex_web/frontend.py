@@ -14,6 +14,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
+from .collab_js import COLLAB_JS
 from .sessions import generate_session_id, serialize_user
 from .users import UserManager
 
@@ -107,6 +108,7 @@ load();
 
 EDITOR_PAGE = _page("Fleetex — Editor", """
 <div class=top><a href=/projects>← Projects</a><span class=brand id=pname>…</span><span class=grow></span>
+  <span class=muted id=conn>connecting…</span>
   <span class=muted id=status></span>
   <button onclick=newDoc()>New doc</button></div>
 <div class=editor>
@@ -118,28 +120,73 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
     <textarea id=ed placeholder='Open a document from the file tree…'></textarea>
   </div>
 </div>
+<script src="/assets/collab.js"></script>
 <script>
-const pid=location.pathname.split('/')[2];let curId=null;
-async function boot(){
+const pid=location.pathname.split('/')[2];
+let boot=null, sock=null, doc=null, curId=null, lastValue='', applyingRemote=false;
+function esc(s){return (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
+function setConn(t){conn.textContent=t}
+function fileLabel(id){const f=document.querySelector(`.file[data-id='${id}']`);return f?f.textContent.trim():'document'}
+async function init(){
   const b=await fetch(`/project/${pid}?format=json`);
   if(b.status===401){location.href='/login';return}
   if(b.status===403){document.body.innerHTML='<div class=card><h1>No access</h1></div>';return}
-  const d=await b.json();pname.textContent=d.projectName||'Project';
+  boot=await b.json();pname.textContent=boot.projectName||'Project';
   await loadTree();
-  if(d.rootDocId)openDoc(d.rootDocId);
+  connect();
+  if(boot.rootDocId)openDoc(boot.rootDocId,'doc');
+}
+function connect(){
+  sock=Fleetex.connect(boot.wsUrl,{projectId:pid},{user_id:boot.user&&boot.user.id},{
+    onConnect(){setConn('🟢 live')},
+    onClose(){setConn('🔴 offline')},
+    onError(e){setConn('🔴 '+e)},
+    onEvent(event,args){handleEvent(event,args)}
+  });
+}
+function handleEvent(event,args){
+  if(event==='otUpdateApplied'){
+    const p=args[0]; if(!doc||p.doc!==curId) return;
+    if(p.op!==undefined) applyRemote(p); else doc.onAck(p.v);
+  } else if(event==='otUpdateError'){ setConn('🔴 sync error') }
+  else if(['reciveNewDoc','reciveNewFolder','reciveNewFile','removeEntity','reciveEntityRename','reciveEntityMove'].indexOf(event)>=0){ loadTree() }
 }
 async function loadTree(){
-  const r=await fetch(`/project/${pid}/tree`);const d=await r.json();
+  const d=await (await fetch(`/project/${pid}/tree`)).json();
   tree.innerHTML=d.entities.map(e=>`<div class=file data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')">${e.type==='doc'?'📄':'📎'} ${esc(e.path.slice(1))}</div>`).join('')||'<div class=muted>Empty</div>';
+  document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===curId));
 }
-function esc(s){return (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
-async function openDoc(id,type){
+function openDoc(id,type){
+  if(id===curId) return;
+  if(curId&&sock) sock.emit('leaveDoc',curId,function(){});
   document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===id));
-  if(type==='file'){ed.value='(binary file — preview not supported)';ed.disabled=true;save.disabled=true;delbtn.disabled=false;curId=id;cur.textContent='binary file';return}
-  const r=await fetch(`/project/${pid}/doc/${id}?plain=true`);
-  if(!r.ok){cur.textContent='could not load';return}
-  ed.value=await r.text();ed.disabled=false;curId=id;save.disabled=false;delbtn.disabled=false;
-  const f=document.querySelector(`.file[data-id='${id}']`);cur.textContent=f?f.textContent.trim():'document';
+  if(type==='file'){ed.value='(binary file)';ed.disabled=true;save.disabled=true;delbtn.disabled=false;curId=id;doc=null;cur.textContent='binary file';return}
+  if(!sock){return httpOpen(id)}
+  sock.emit('joinDoc',id,-1,{},function(err,lines,version){
+    if(err){setConn('🔴 join failed');return httpOpen(id)}
+    curId=id;
+    const snap=(lines||['']).join('\\n');
+    doc=new Fleetex.CollabDoc(snap,version||0,function(u){sock.emit('applyOtUpdate',id,{op:u.op,v:u.v,meta:{}})});
+    ed.value=snap;lastValue=snap;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · live';
+  });
+}
+async function httpOpen(id){ // fallback when socket unavailable
+  const r=await fetch(`/project/${pid}/doc/${id}?plain=true`); if(!r.ok){cur.textContent='could not load';return}
+  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · offline';
+}
+ed.addEventListener('input',function(){
+  if(applyingRemote) return;
+  if(doc){ const op=Fleetex.makeOp(lastValue,ed.value); lastValue=ed.value; if(op.length) doc.submitLocal(op); }
+  else lastValue=ed.value;
+});
+function applyRemote(p){
+  applyingRemote=true;
+  const s=ed.selectionStart,e=ed.selectionEnd;
+  const incoming=doc.onRemote(p.op,p.v);
+  ed.value=doc.snapshot;lastValue=doc.snapshot;
+  let ns=s,ne=e; for(const c of incoming){ns=Fleetex.OT.tp(ns,c,false);ne=Fleetex.OT.tp(ne,c,false)}
+  ed.setSelectionRange(ns,ne);
+  applyingRemote=false;
 }
 async function save(){
   if(!curId)return;status.textContent='Saving…';
@@ -147,9 +194,9 @@ async function save(){
   status.textContent=r.ok?'Saved ✓':'Save failed';setTimeout(()=>status.textContent='',1500);
 }
 async function newDoc(){const n=prompt('New document name (e.g. chapter.tex):');if(!n)return;const r=await fetch(`/project/${pid}/doc`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n})});if(r.ok){await loadTree();const d=await r.json();openDoc(d._id,'doc')}else alert('Could not create document')}
-async function delDoc(){if(!curId||!confirm('Delete this entity?'))return;const f=document.querySelector(`.file[data-id='${curId}']`);const type=f?f.dataset.type:'doc';await fetch(`/project/${pid}/${type}/${curId}`,{method:'DELETE'});curId=null;ed.value='';save.disabled=true;delbtn.disabled=true;cur.textContent='No document open';loadTree()}
+async function delDoc(){if(!curId||!confirm('Delete this entity?'))return;const f=document.querySelector(`.file[data-id='${curId}']`);const type=f?f.dataset.type:'doc';await fetch(`/project/${pid}/${type}/${curId}`,{method:'DELETE'});curId=null;doc=null;ed.value='';save.disabled=true;delbtn.disabled=true;cur.textContent='No document open';loadTree()}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();save()}});
-boot();
+init();
 </script>""")
 
 
@@ -178,6 +225,10 @@ def register_frontend_routes(app: FastAPI, *, config, store, users: UserManager)
     @app.get("/projects")
     async def dashboard_page():
         return HTMLResponse(DASHBOARD_PAGE)
+
+    @app.get("/assets/collab.js")
+    async def collab_js():
+        return Response(COLLAB_JS, media_type="application/javascript")
 
     @app.post("/register")
     async def register(request: Request):
