@@ -97,6 +97,16 @@ def main():
         page.click("#savebtn")
         check("Save button works", _wait_status(page, "Saved"), page.eval_on_selector("#statusmsg", "e=>e.textContent"))
 
+        # drag the editor|preview divider to resize the panes
+        before = page.eval_on_selector("#editorEl", "e=>getComputedStyle(e).gridTemplateColumns")
+        box = page.locator("#g2").bounding_box()
+        page.mouse.move(box["x"] + 3, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(box["x"] - 200, box["y"] + box["height"] / 2)
+        page.mouse.up()
+        after = page.eval_on_selector("#editorEl", "e=>getComputedStyle(e).gridTemplateColumns")
+        check("dragging the divider resizes the panes", before != after, "columns changed" if before != after else "no change")
+
         page.click("#pdftoggle")
         check("Hide preview toggles pdf pane", page.eval_on_selector(".editor", "e=>e.classList.contains('nopdf')"))
 
@@ -107,6 +117,15 @@ def main():
         page.wait_for_timeout(800)
         gone = page.eval_on_selector_all(".file", "els=>els.every(e=>e.getAttribute('data-id')!=='%s')" % did2)
         check("delete removes the doc from the tree", gone)
+
+        # persistence: reload the whole page (like leaving and reopening the
+        # project) and confirm the saved edit is still there
+        page.reload()
+        page.wait_for_selector("#ed:not([disabled])", timeout=15000)
+        page.wait_for_function("document.querySelector('#ed').value.length>0", timeout=15000)
+        reopened = page.input_value("#ed")
+        check("saved edit persists across a reload", (MARK + "-2") in reopened,
+              "marker " + ("FOUND" if (MARK + "-2") in reopened else "MISSING"))
 
         browser.close()
         if console_errors:

@@ -173,7 +173,13 @@ def register_editor_routes(app: FastAPI, *, pm: ProjectManager, db, store, confi
         lines = body.get("lines")
         if lines is None:
             lines = (body.get("content") or "").split("\n")
-        await docstore.update_doc(project_id, doc_id, lines, body.get("version", 0), body.get("ranges", {}))
+        # docstore rejects a write whose version is <= the stored one
+        # (DocVersionDecrementedError). Seeded/healed docs start at version 1 and
+        # the browser doesn't track a version, so always save at current+1 —
+        # otherwise the write is silently dropped and edits don't persist.
+        current = await docstore.get_doc(project_id, doc_id)
+        next_version = (current.get("version", 0) if current else 0) + 1
+        await docstore.update_doc(project_id, doc_id, lines, next_version, body.get("ranges", {}))
         # Also push the saved content into document-updater (the live doc), since
         # that is what a compile reads. This makes save/compile reliable even when
         # the live OT websocket sync is unavailable or flaky.

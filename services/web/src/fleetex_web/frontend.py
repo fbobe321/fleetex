@@ -37,9 +37,10 @@ button:hover{filter:brightness(1.1)}
 .list{max-width:760px;margin:24px auto;padding:0 16px}
 .proj{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#1b1e27;border:1px solid #2a2e3a;border-radius:10px;margin-bottom:8px}
 .proj .grow{flex:1}.proj .name{font-weight:600}
-.editor{display:grid;grid-template-columns:240px 1fr 1fr;height:calc(100vh - 49px)}
-.editor.nopdf{grid-template-columns:240px 1fr}
-.editor.nopdf .pdf{display:none}
+.editor{display:grid;grid-template-columns:240px 6px 1fr 6px 1fr;height:calc(100vh - 49px)}
+.vgut{background:#2a2e3a;cursor:col-resize;user-select:none}
+.vgut:hover{background:#2f6fed}
+.editor.nopdf .pdf,.editor.nopdf #g2{display:none}
 .tree{border-right:1px solid #2a2e3a;overflow:auto;padding:8px}
 .tree .file{padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;gap:8px}
 .tree .file:hover{background:#2a2e3a}.tree .file.active{background:#2f6fed33}
@@ -148,8 +149,9 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <button class=ghost onclick=newDoc()>New doc</button>
   <button class=ghost onclick=fileinput.click()>Upload</button>
   <input type=file id=fileinput style=display:none onchange=doUpload()></div>
-<div class=editor>
+<div class=editor id=editorEl>
   <div class=tree id=tree></div>
+  <div class=vgut id=g1></div>
   <div class=pane>
     <div class=bar><span class=muted id=cur>No document open</span><span class=grow></span>
       <button id=savebtn onclick=save() disabled>Save</button>
@@ -163,6 +165,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
       </div>
     </div>
   </div>
+  <div class=vgut id=g2></div>
   <div class=pdf>
     <div class=bar><span class=muted id=pdfstatus>Press Compile ▶ to build the PDF</span><span class=grow></span>
       <a id=pdfopen class=muted style='display:none;margin-right:10px' target=_blank>⤢ Open</a>
@@ -419,9 +422,27 @@ async function compile(){
   }finally{ compileBtn.disabled=false }
 }
 function togglePdf(){
-  const hidden=document.querySelector('.editor').classList.toggle('nopdf');
+  const hidden=editorEl.classList.toggle('nopdf');
   pdftoggle.textContent=hidden?'Show preview':'Hide preview';
+  applyLayout();
 }
+// resizable panes: drag the dividers between tree | editor | preview
+let treeW=240, edFrac=0.5;
+function applyLayout(){
+  if(editorEl.classList.contains('nopdf')) editorEl.style.gridTemplateColumns=treeW+'px 6px 1fr';
+  else editorEl.style.gridTemplateColumns=treeW+'px 6px '+edFrac.toFixed(3)+'fr 6px '+(1-edFrac).toFixed(3)+'fr';
+}
+function startDrag(handle,onMove){
+  handle.addEventListener('mousedown',function(ev){
+    ev.preventDefault();
+    function mv(e){ onMove(e); }
+    function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); document.body.style.cursor=''; renderCursors(); }
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); document.body.style.cursor='col-resize';
+  });
+}
+startDrag(g1,function(e){ treeW=Math.max(140,Math.min(480,e.clientX)); applyLayout(); });
+startDrag(g2,function(e){ const r=editorEl.getBoundingClientRect(); const avail=r.width-treeW-12; edFrac=Math.max(0.15,Math.min(0.85,(e.clientX-r.left-treeW-6)/avail)); applyLayout(); });
+applyLayout();
 document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();save()}
   if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();compile()}
