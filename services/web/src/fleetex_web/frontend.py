@@ -140,7 +140,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
 <div class=top><a href=/projects>← Projects</a><span class=brand id=pname>…</span><span class=grow></span>
   <span class=presence id=presence></span>
   <span class=muted id=conn>connecting…</span>
-  <span class=muted id=status></span>
+  <span class=muted id=statusmsg></span>
   <button id=compileBtn onclick=compile()>Compile ▶</button>
   <button class=ghost id=pdftoggle onclick=togglePdf()>Hide preview</button>
   <button class=ghost onclick=share()>Share</button>
@@ -152,7 +152,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <div class=tree id=tree></div>
   <div class=pane>
     <div class=bar><span class=muted id=cur>No document open</span><span class=grow></span>
-      <button id=save onclick=save() disabled>Save</button>
+      <button id=savebtn onclick=save() disabled>Save</button>
       <button class=ghost id=delbtn onclick=delDoc() disabled>Delete</button></div>
     <div class=edwrap>
       <div class=gutter id=gutter>1</div>
@@ -272,12 +272,13 @@ function openDoc(id,type){
   if(id===curId) return;
   if(curId&&sock&&doc) sock.emit('leaveDoc',curId,function(){});
   document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===id));
-  if(type==='file'){ed.value='(binary file)';ed.disabled=true;save.disabled=true;delbtn.disabled=false;curId=id;doc=null;cur.textContent='binary file';return}
-  // HTTP-first: open reliably over HTTP so the doc is immediately editable /
-  // saveable / deletable, independent of the live-sync websocket. Then try to
-  // upgrade to live collaboration on top (best-effort).
+  if(type==='file'){ed.value='(binary file)';ed.disabled=true;savebtn.disabled=true;delbtn.disabled=false;curId=id;doc=null;cur.textContent='binary file';return}
+  // HTTP-only editing: open over HTTP so the doc is immediately editable /
+  // saveable / deletable. Live-collab OT is intentionally OFF for now — it was
+  // silently dropping edits and corrupting the compiled doc; single-user editing
+  // is reliable this way. (Re-enable via upgradeLive once OT sync is hardened.)
   doc=null;
-  httpOpen(id).then(function(){ if(sock&&curId===id) upgradeLive(id); });
+  httpOpen(id);
 }
 function upgradeLive(id){
   const baseline=ed.value;
@@ -292,7 +293,7 @@ function upgradeLive(id){
 }
 async function httpOpen(id){
   const r=await fetch(`/project/${pid}/doc/${id}?plain=true`); if(!r.ok){cur.textContent='could not load';return}
-  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · editing';updateView();refreshHistoryIfOpen();
+  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;savebtn.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · editing';updateView();refreshHistoryIfOpen();
 }
 ed.addEventListener('input',function(){
   if(applyingRemote) return;
@@ -313,10 +314,10 @@ function applyRemote(p){
   liveDiffSoon();
 }
 async function save(){
-  if(!curId){status.textContent='Open a document first';setTimeout(()=>status.textContent='',1500);return}
-  status.textContent='Saving…';
+  if(!curId){statusmsg.textContent='Open a document first';setTimeout(()=>statusmsg.textContent='',1500);return}
+  statusmsg.textContent='Saving…';
   const r=await fetch(`/project/${pid}/doc/${curId}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:ed.value})});
-  status.textContent=r.ok?'Saved ✓':'Save failed';setTimeout(()=>status.textContent='',1500);
+  statusmsg.textContent=r.ok?'Saved ✓':'Save failed';setTimeout(()=>statusmsg.textContent='',1500);
   if(r.ok) recordVersion('save');
 }
 // ---- version history ---------------------------------------------------- #
@@ -379,7 +380,7 @@ async function restoreSelected(){
   if(doc){ // live: replay as a normal OT edit so every connected client converges
     const op=Fleetex.makeOp(lastValue,content); ed.value=content; lastValue=content; if(op.length) doc.submitLocal(op); updateView();
   } else { ed.value=content;lastValue=content;updateView();await save(); }
-  status.textContent='Restored v'+histSelected;setTimeout(()=>status.textContent='',2500);
+  statusmsg.textContent='Restored v'+histSelected;setTimeout(()=>statusmsg.textContent='',2500);
   recordVersion('restore');
 }
 async function share(){
@@ -394,13 +395,13 @@ async function share(){
 async function doUpload(){
   const f=fileinput.files[0]; if(!f) return;
   const fd=new FormData(); fd.append('qqfile',f); fd.append('name',f.name);
-  status.textContent='Uploading '+f.name+'…';
+  statusmsg.textContent='Uploading '+f.name+'…';
   const r=await fetch(`/project/${pid}/upload`,{method:'POST',body:fd}); fileinput.value='';
-  status.textContent=r.ok?('✓ uploaded '+f.name):'upload failed'; setTimeout(()=>status.textContent='',2000);
+  statusmsg.textContent=r.ok?('✓ uploaded '+f.name):'upload failed'; setTimeout(()=>statusmsg.textContent='',2000);
   if(r.ok) loadTree();
 }
 async function newDoc(){const n=prompt('New document name (e.g. chapter.tex):');if(!n)return;const r=await fetch(`/project/${pid}/doc`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n})});if(r.ok){await loadTree();const d=await r.json();openDoc(d._id,'doc')}else alert('Could not create document')}
-async function delDoc(){if(!curId||!confirm('Delete this entity?'))return;const f=document.querySelector(`.file[data-id='${curId}']`);const type=f?f.dataset.type:'doc';await fetch(`/project/${pid}/${type}/${curId}`,{method:'DELETE'});curId=null;doc=null;ed.value='';save.disabled=true;delbtn.disabled=true;cur.textContent='No document open';loadTree()}
+async function delDoc(){if(!curId||!confirm('Delete this entity?'))return;const f=document.querySelector(`.file[data-id='${curId}']`);const type=f?f.dataset.type:'doc';await fetch(`/project/${pid}/${type}/${curId}`,{method:'DELETE'});curId=null;doc=null;ed.value='';savebtn.disabled=true;delbtn.disabled=true;cur.textContent='No document open';loadTree()}
 async function compile(){
   if(curId) await save().catch(()=>{});  // flush current buffer so the compile sees it
   compileBtn.disabled=true;pdfstatus.textContent='Compiling…';
