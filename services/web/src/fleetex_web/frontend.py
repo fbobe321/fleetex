@@ -49,6 +49,8 @@ button:hover{filter:brightness(1.1)}
 .tree .folder{font-weight:600}
 .tree .file.active{background:#2f6fed44;outline:1px solid #2f6fed}
 .tree .emptyfolder{color:#5b6270;font-size:12px;font-style:italic;padding:3px 8px}
+.tree .file[draggable]{cursor:grab}
+.tree .dropok{background:#2f6fed66;outline:1px dashed #6ea8fe}
 .pane{display:flex;flex-direction:column;min-width:0}
 .pane .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
 .edwrap{flex:1;display:flex;min-height:0;background:#0e1016;overflow:hidden}
@@ -298,22 +300,33 @@ async function loadTree(){
   const d=await (await fetch(`/project/${pid}/tree`)).json();
   const ents=d.entities||[], paths=ents.map(e=>e.path);
   const hasKids=fp=>paths.some(p=>p!==fp&&p.startsWith(fp+'/'));
-  let h='<div class=treehdr onclick="selectFolder(null,null)">📂 new items → '+(curFolder?('📁 '+esc(curFolderName)):'project root')+'</div>';
+  let h='<div class=treehdr onclick="selectFolder(null,null)" ondragover="allowDrop(event,this)" ondragleave="dropLeave(this)" ondrop="dropOn(null,event,this)">📂 new items → '+(curFolder?('📁 '+esc(curFolderName)):'project root')+'  <span class=muted>(drag here for root)</span></div>';
   let rows='';
   for(const e of ents){
     const depth=Math.max(0,e.path.split('/').length-2), name=e.path.split('/').pop();
     const pad="padding-left:"+(8+depth*14)+"px";
     if(e.type==='folder'){
-      rows+=`<div class="file folder" style="${pad}" data-id='${e.id}' data-type=folder title='Click to add new items here' onclick="selectFolder('${e.id}',this)">📁 ${esc(name)}</div>`;
-      if(!hasKids(e.path)) rows+=`<div class=emptyfolder style="padding-left:${8+(depth+1)*14}px">(empty — select it, then New doc)</div>`;
+      rows+=`<div class="file folder" style="${pad}" data-id='${e.id}' data-type=folder title='Click to target · drop files here to move them in' onclick="selectFolder('${e.id}',this)" ondragover="allowDrop(event,this)" ondragleave="dropLeave(this)" ondrop="dropOn('${e.id}',event,this)">📁 ${esc(name)}</div>`;
+      if(!hasKids(e.path)) rows+=`<div class=emptyfolder style="padding-left:${8+(depth+1)*14}px">(empty — drop a file here, or select it + New doc)</div>`;
     } else {
-      rows+=`<div class=file style="${pad}" data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')">${e.type==='doc'?'📄':'📎'} ${esc(name)}</div>`;
+      rows+=`<div class=file draggable=true style="${pad}" data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')" ondragstart="dragStart('${e.id}','${e.type}',event)">${e.type==='doc'?'📄':'📎'} ${esc(name)}</div>`;
     }
   }
   tree.innerHTML=h+(rows||'<div class=muted>Empty — use New doc / New folder</div>');
   document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===curId||f.dataset.id===curFolder));
 }
 function selectFolder(id,el){ curFolder=id; curFolderName=el?el.textContent.replace('📁','').trim():''; loadTree(); }
+// drag a doc/file onto a folder (or the header for root) to move it there
+let dragEntity=null;
+function dragStart(id,type,ev){ dragEntity={id:id,type:type}; ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain',id); }
+function allowDrop(ev,el){ if(!dragEntity) return; ev.preventDefault(); ev.dataTransfer.dropEffect='move'; if(el) el.classList.add('dropok'); }
+function dropLeave(el){ if(el) el.classList.remove('dropok'); }
+async function dropOn(folderId,ev,el){
+  ev.preventDefault(); if(el) el.classList.remove('dropok');
+  if(!dragEntity) return; const d=dragEntity; dragEntity=null;
+  const r=await fetch(`/project/${pid}/${d.type}/${d.id}/move`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({folder_id:folderId})});
+  if(r.ok) loadTree(); else { const j=await r.json().catch(()=>({})); alert('Could not move: '+((j.message&&j.message.text)||r.status)); }
+}
 async function newFolder(){
   const n=prompt('New folder name'+(curFolder?(' (inside '+curFolderName+')'):'')+':'); if(!n) return;
   const r=await fetch(`/project/${pid}/folder`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n,parent_folder_id:curFolder})});

@@ -183,6 +183,49 @@ def main():
         dialog_value["v"] = ""
         check("a doc created inside a folder is nested under it", nested, "inside.tex indented")
 
+        # drag & drop: create a root doc, then drag it onto the folder
+        page.click(".treehdr")  # target root
+        dialog_value["v"] = "movable.tex"
+        page.click("button:has-text('New doc')")
+        page.wait_for_function(
+            "[...document.querySelectorAll(\".tree .file[data-type='doc']\")].some(e=>e.textContent.includes('movable.tex'))",
+            timeout=8000)
+        dialog_value["v"] = ""
+        page.evaluate(
+            """(fname)=>{
+                const src=[...document.querySelectorAll(".tree .file[data-type='doc']")].find(e=>e.textContent.includes('movable.tex'));
+                const tgt=[...document.querySelectorAll('.tree .folder')].find(e=>e.textContent.includes(fname));
+                const dt=new DataTransfer();
+                src.dispatchEvent(new DragEvent('dragstart',{dataTransfer:dt,bubbles:true}));
+                tgt.dispatchEvent(new DragEvent('dragover',{dataTransfer:dt,bubbles:true,cancelable:true}));
+                tgt.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));
+            }""", fname)
+        try:
+            page.wait_for_function(
+                "[...document.querySelectorAll(\".tree .file[data-type='doc']\")]"
+                ".some(e=>e.textContent.includes('movable.tex') && parseInt(getComputedStyle(e).paddingLeft)>10)",
+                timeout=8000)
+            moved = True
+        except Exception:
+            moved = False
+        check("drag & drop moves a doc into a folder", moved)
+
+        # upload a binary into the selected folder (a .png becomes a fileRef 📎)
+        page.click(".tree .folder")  # select the folder
+        tmpf = tempfile.mktemp(suffix=".png")
+        open(tmpf, "wb").write(b"\x89PNG\r\n\x1a\n" + b"fleetex-fake-png" * 8)
+        page.set_input_files("#fileinput", tmpf)
+        try:
+            page.wait_for_function(
+                "[...document.querySelectorAll(\".tree .file[data-type='file']\")]"
+                ".some(e=>parseInt(getComputedStyle(e).paddingLeft)>10)",
+                timeout=10000)
+            up_nested = True
+        except Exception:
+            up_nested = False
+        os.remove(tmpf)
+        check("upload goes into the selected folder", up_nested)
+
         browser.close()
         if console_errors:
             print("\nBROWSER CONSOLE ERRORS:")

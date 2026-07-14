@@ -400,7 +400,7 @@ def register_file_tree_routes(app: FastAPI, *, pm: ProjectManager, db, store, co
         return Response(status_code=204)
 
     @app.post("/project/{project_id}/upload")
-    async def upload_file(project_id: str, request: Request, qqfile: UploadFile = File(...), name: str = Form(...)):
+    async def upload_file(project_id: str, request: Request, qqfile: UploadFile = File(...), name: str = Form(...), folder_id: str = Form(None)):
         loaded, err = await _load(request, project_id)
         if err:
             return err
@@ -409,10 +409,11 @@ def register_file_tree_routes(app: FastAPI, *, pm: ProjectManager, db, store, co
         if len(content) > 50 * 1024 * 1024:
             return JSONResponse({"success": False, "error": "file_too_large"}, status_code=422)
         try:
-            folder_id = request.query_params.get("folder_id")
-            if folder_id in (None, "", "null", "None"):
-                folder_id = None  # default to the root folder
-            result = await ft.upload(project, folder_id, name, content, uid)
+            # accept folder_id as a form field (what the editor sends) or a query param
+            fid = folder_id or request.query_params.get("folder_id")
+            if fid in (None, "", "null", "None"):
+                fid = None  # default to the root folder
+            result = await ft.upload(project, fid, name, content, uid)
         except FileTreeError as exc:
             return JSONResponse({"success": False, "error": exc.code}, status_code=422)
         return JSONResponse({"success": True, **result})
