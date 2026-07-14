@@ -340,23 +340,29 @@ function openDoc(id,type){
   if(curId&&sock&&doc) sock.emit('leaveDoc',curId,function(){});
   document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===id));
   if(type==='file'){ed.value='(binary file)';ed.disabled=true;savebtn.disabled=true;delbtn.disabled=false;curId=id;doc=null;cur.textContent='binary file';return}
-  // HTTP-only editing: open over HTTP so the doc is immediately editable /
-  // saveable / deletable. Live-collab OT is intentionally OFF for now — it was
-  // silently dropping edits and corrupting the compiled doc; single-user editing
-  // is reliable this way. (Re-enable via upgradeLive once OT sync is hardened.)
-  doc=null;
-  httpOpen(id);
+  // HTTP-first: open over HTTP so the doc is immediately editable, then upgrade
+  // to live collaboration on top. The join is retried until it lands (a join
+  // emitted before the socket finished connecting is silently dropped).
+  doc=null; joinAttempts=0;
+  httpOpen(id).then(function(){ if(sock&&curId===id) upgradeLive(id); });
 }
+let joinAttempts=0;
 function upgradeLive(id){
-  const baseline=ed.value;
+  if(doc||curId!==id||!sock) return;
+  joinAttempts++;
   sock.emit('joinDoc',id,-1,{},function(err,lines,version){
-    // bail if join failed, the user switched docs, or already started typing
-    if(err||curId!==id||ed.value!==baseline) return;
+    if(curId!==id||doc) return;      // switched docs, or a retry already landed
+    if(err) return;                   // the retry timer below will try again
     const snap=(lines||['']).join('\\n');
     doc=new Fleetex.CollabDoc(snap,version||0,function(u){sock.emit('applyOtUpdate',id,{op:u.op,v:u.v,meta:{}})});
-    ed.value=snap;lastValue=snap;updateView();cur.textContent=fileLabel(id)+' · live';
+    // reconcile: if the user typed while we were connecting, submit their diff so
+    // it syncs; otherwise adopt the server snapshot.
+    if(ed.value!==snap){ const op=Fleetex.makeOp(snap,ed.value); lastValue=ed.value; if(op.length) doc.submitLocal(op); }
+    else { lastValue=snap; }
+    updateView(); cur.textContent=fileLabel(id)+' · live';
     requestPresence(); sendCursor(); renderCursors();
   });
+  if(joinAttempts<8) setTimeout(function(){ if(curId===id&&!doc) upgradeLive(id); }, 1500);
 }
 async function httpOpen(id){
   const r=await fetch(`/project/${pid}/doc/${id}?plain=true`); if(!r.ok){cur.textContent='could not load';return}
