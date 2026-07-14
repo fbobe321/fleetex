@@ -16,8 +16,14 @@ name: fleetex-app
 x-build: &repo-root
   context: .
 
+# applied to every service so the stack auto-restarts on reboot
+# (with Docker enabled at boot: `sudo systemctl enable docker`).
+x-defaults: &defaults
+  restart: unless-stopped
+
 services:
   mongo:
+    <<: *defaults
     image: mongo:8.0
     volumes:
       - mongo_data:/data/db
@@ -28,6 +34,7 @@ services:
       retries: 20
 
   redis:
+    <<: *defaults
     image: redis:6.2
     volumes:
       - redis_data:/data
@@ -38,6 +45,7 @@ services:
       retries: 20
 
   docstore:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/docstore/Dockerfile}
     environment:
       MONGO_URL: mongodb://mongo:27017/sharelatex
@@ -45,6 +53,7 @@ services:
       mongo: {condition: service_healthy}
 
   filestore:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/filestore/Dockerfile}
     environment:
       BACKEND: fs
@@ -53,11 +62,13 @@ services:
       - filestore_data:/var/lib/overleaf/data/filestore
 
   clsi:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/clsi/Dockerfile}
     volumes:
       - clsi_data:/app/clsi_data
 
   chat:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/chat/Dockerfile}
     environment:
       MONGO_URL: mongodb://mongo:27017/sharelatex
@@ -65,6 +76,7 @@ services:
       mongo: {condition: service_healthy}
 
   notifications:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/notifications/Dockerfile}
     environment:
       MONGO_URL: mongodb://mongo:27017/sharelatex
@@ -72,6 +84,7 @@ services:
       mongo: {condition: service_healthy}
 
   document-updater:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/document-updater/Dockerfile}
     environment:
       REDIS_URL: redis://redis:6379
@@ -83,6 +96,7 @@ services:
       docstore: {condition: service_started}
 
   project-history:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/project-history/Dockerfile}
     environment:
       MONGO_URL: mongodb://mongo:27017/sharelatex
@@ -91,6 +105,7 @@ services:
       mongo: {condition: service_healthy}
 
   web:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/web/Dockerfile}
     environment:
       MONGO_URL: mongodb://mongo:27017/sharelatex
@@ -114,6 +129,7 @@ services:
       docstore: {condition: service_started}
 
   real-time:
+    <<: *defaults
     build: {<<: *repo-root, dockerfile: services/real-time/Dockerfile}
     environment:
       REDIS_URL: redis://redis:6379

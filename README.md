@@ -67,6 +67,33 @@ No `create-admin` step — the Python stack uses open self-registration. With no
 (stock Overleaf CE on :8080) remains the default; switch back with
 `fleetex config --edition ce`.
 
+### Backups
+
+Your data (projects, users, docs, uploads) lives in Docker named volumes that
+survive rebuilds and upgrades. Snapshot and restore it with:
+
+```bash
+fleetex backup                       # writes ~/.fleetex/backups/fleetex-backup-<timestamp>/
+fleetex backup --output /mnt/backups # or choose where
+fleetex restore ~/.fleetex/backups/fleetex-backup-20260101-120000   # OVERWRITES current data
+```
+
+`restore` stops the stack, replaces the data, and prompts before doing anything
+destructive. Run a `fleetex backup` before any risky upgrade.
+
+### Auto-start on reboot
+
+Every service uses `restart: unless-stopped`, so once Docker starts at boot the
+whole stack comes back up on its own. Enable Docker at boot once:
+
+```bash
+sudo systemctl enable docker
+fleetex up            # start it once; it now returns after every reboot
+```
+
+(`fleetex down` stops it and keeps it stopped across reboots until the next
+`fleetex up`.)
+
 ---
 
 ## Why this exists

@@ -21,6 +21,8 @@ import webbrowser
 from pathlib import Path
 
 from . import __version__
+from .backup import backup as do_backup
+from .backup import restore as do_restore
 from .compose import DockerError, capture, ensure_ready, run
 from .config import Config
 
@@ -215,6 +217,33 @@ def cmd_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backup(args: argparse.Namespace) -> int:
+    cfg = _load(args)
+    print("Backing up Fleetex data ...")
+    dest = do_backup(cfg, args.output)
+    print(f"\n✅ Backup written to: {dest}")
+    print(f"Restore it later with:  fleetex restore {dest}")
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    cfg = _load(args)
+    confirm = input(
+        "This OVERWRITES the current projects/users/docs with the backup. "
+        "Type 'yes' to continue: "
+    )
+    if confirm.strip().lower() != "yes":
+        return _err("aborted")
+    # the stack must not be using the volumes while we replace them
+    if cfg.active_compose_path().is_file():
+        print("Stopping the stack ...")
+        run(cfg, ["down"], check=False)
+    print("Restoring data ...")
+    do_restore(cfg, args.source)
+    print("\n✅ Restore complete. Start the stack with:  fleetex up")
+    return 0
+
+
 def cmd_version(args: argparse.Namespace) -> int:
     cfg = _load(args)
     if cfg.is_python:
@@ -302,6 +331,14 @@ def build_parser() -> argparse.ArgumentParser:
         "server's LAN IP for remote access)",
     )
     cf.set_defaults(func=cmd_config)
+
+    bk = sub.add_parser("backup", help="Back up data (projects, docs, uploads) to a timestamped folder")
+    bk.add_argument("--output", help="Directory to write the backup into (default: <home>/backups)")
+    bk.set_defaults(func=cmd_backup)
+
+    rst = sub.add_parser("restore", help="Restore data from a backup folder (OVERWRITES current data)")
+    rst.add_argument("source", help="Path to a fleetex-backup-* folder created by `fleetex backup`")
+    rst.set_defaults(func=cmd_restore)
 
     vs = sub.add_parser("version", help="Show launcher and Docker versions")
     vs.set_defaults(func=cmd_version)

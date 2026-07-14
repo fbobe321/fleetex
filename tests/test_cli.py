@@ -143,3 +143,52 @@ def test_parser_accepts_python_config_flags():
     parser = build_parser()
     ns = parser.parse_args(["config", "--edition", "python", "--source", "/x", "--advertise-host", "10.0.0.5"])
     assert ns.edition == "python" and ns.source_dir == "/x" and ns.advertise_host == "10.0.0.5"
+
+
+# --- backup / restore ----------------------------------------------------- #
+def test_parser_accepts_backup_and_restore():
+    parser = build_parser()
+    assert hasattr(parser.parse_args(["backup"]), "func")
+    assert hasattr(parser.parse_args(["backup", "--output", "/tmp/b"]), "func")
+    ns = parser.parse_args(["restore", "/tmp/b/fleetex-backup-x"])
+    assert ns.source == "/tmp/b/fleetex-backup-x"
+
+
+def test_backup_python_tars_each_data_volume(tmp_path: Path, monkeypatch):
+    from fleetex import backup as bk
+
+    cmds = []
+    monkeypatch.setattr(bk, "_run", lambda cmd: cmds.append(" ".join(cmd)))
+    cfg = Config.load(tmp_path)
+    cfg.edition = "python"
+    dest = bk.backup(cfg, output=str(tmp_path / "out"))
+    assert dest.name.startswith("fleetex-backup-")
+    for vol in ("mongo_data", "filestore_data", "redis_data"):
+        assert any(f"fleetex-app_{vol}:/data" in c and f"/backup/{vol}.tar.gz" in c for c in cmds), vol
+    # the disposable compile cache is not backed up
+    assert not any("clsi_data" in c for c in cmds)
+
+
+def test_backup_ce_tars_data_dir(tmp_path: Path, monkeypatch):
+    from fleetex import backup as bk
+
+    cmds = []
+    monkeypatch.setattr(bk, "_run", lambda cmd: cmds.append(" ".join(cmd)))
+    cfg = Config.load(tmp_path)  # ce is the default edition
+    bk.backup(cfg, output=str(tmp_path / "out"))
+    assert any("ce-data.tar.gz" in c and str(cfg.data_path) in c for c in cmds)
+
+
+def test_restore_python_untars_into_volumes(tmp_path: Path, monkeypatch):
+    from fleetex import backup as bk
+
+    src = tmp_path / "fleetex-backup-1"
+    src.mkdir()
+    (src / "mongo_data.tar.gz").write_bytes(b"x")  # only mongo present
+    cmds = []
+    monkeypatch.setattr(bk, "_run", lambda cmd: cmds.append(" ".join(cmd)))
+    cfg = Config.load(tmp_path)
+    cfg.edition = "python"
+    bk.restore(cfg, str(src))
+    assert any("fleetex-app_mongo_data:/data" in c for c in cmds)
+    assert not any("filestore_data" in c for c in cmds)  # absent archive skipped
