@@ -435,8 +435,12 @@ function applyLayout(){
 function startDrag(handle,onMove){
   handle.addEventListener('mousedown',function(ev){
     ev.preventDefault();
+    // the PDF iframe (and textarea) swallow mousemove events, which made the
+    // divider impossible to drag rightward over the preview — disable pointer
+    // events on them for the duration of the drag.
+    pdfframe.style.pointerEvents='none'; ed.style.pointerEvents='none';
     function mv(e){ onMove(e); }
-    function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); document.body.style.cursor=''; renderCursors(); }
+    function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); document.body.style.cursor=''; pdfframe.style.pointerEvents=''; ed.style.pointerEvents=''; renderCursors(); }
     document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); document.body.style.cursor='col-resize';
   });
 }

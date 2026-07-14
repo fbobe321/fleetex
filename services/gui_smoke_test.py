@@ -97,15 +97,21 @@ def main():
         page.click("#savebtn")
         check("Save button works", _wait_status(page, "Saved"), page.eval_on_selector("#statusmsg", "e=>e.textContent"))
 
-        # drag the editor|preview divider to resize the panes
-        before = page.eval_on_selector("#editorEl", "e=>getComputedStyle(e).gridTemplateColumns")
+        # drag the editor|preview divider RIGHT (the direction that used to stick
+        # because the cursor passed over the PDF iframe) and confirm the editor
+        # column actually grows.
+        def editor_col_px():
+            cols = page.eval_on_selector("#editorEl", "e=>getComputedStyle(e).gridTemplateColumns")
+            return float(cols.split()[2].replace("px", ""))  # tree gutter EDITOR gutter pdf
+        w0 = editor_col_px()
         box = page.locator("#g2").bounding_box()
         page.mouse.move(box["x"] + 3, box["y"] + box["height"] / 2)
         page.mouse.down()
-        page.mouse.move(box["x"] - 200, box["y"] + box["height"] / 2)
+        for dx in range(0, 260, 20):  # sweep rightward over the iframe
+            page.mouse.move(box["x"] + 3 + dx, box["y"] + box["height"] / 2)
         page.mouse.up()
-        after = page.eval_on_selector("#editorEl", "e=>getComputedStyle(e).gridTemplateColumns")
-        check("dragging the divider resizes the panes", before != after, "columns changed" if before != after else "no change")
+        w1 = editor_col_px()
+        check("dragging divider RIGHT widens the editor (over the iframe)", w1 > w0 + 100, f"{w0:.0f}px -> {w1:.0f}px")
 
         page.click("#pdftoggle")
         check("Hide preview toggles pdf pane", page.eval_on_selector(".editor", "e=>e.classList.contains('nopdf')"))
