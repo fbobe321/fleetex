@@ -60,6 +60,22 @@ button:hover{filter:brightness(1.1)}
 .pdf{display:flex;flex-direction:column;border-left:1px solid #2a2e3a;min-width:0}
 .pdf .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
 .pdf iframe{flex:1;border:0;background:#fff}
+.pdf .tab{background:#2a2e3a;padding:5px 10px;font-size:13px}
+.pdf .tab.active{background:#2f6fed}
+.logview{flex:1;overflow:auto;display:none;background:#0e1016}
+.pdf.showlog iframe{display:none}
+.pdf.showlog .logview{display:block}
+.logitem{padding:8px 12px;border-bottom:1px solid #1b1e27;cursor:pointer;font:12px/1.4 ui-monospace,monospace}
+.logitem:hover{background:#1b1e27}
+.logitem.error{border-left:3px solid #ff6b6b}
+.logitem.warning{border-left:3px solid #e0a458}
+.logitem.ok{border-left:3px solid #3fb950}
+.logitem .lmsg{color:#e6e8ee;white-space:pre-wrap;word-break:break-word}
+.logitem .lmeta{color:#8a90a2;font-size:11px;margin-top:2px}
+.logempty{padding:16px;color:#8a90a2;font-size:13px}
+.rawlog{white-space:pre-wrap;padding:12px;color:#8a90a2;font:11px/1.4 ui-monospace,monospace;display:none}
+.pdf.rawmode .logview .logitem,.pdf.rawmode .logview .logempty{display:none}
+.pdf.rawmode .rawlog{display:block}
 .histpanel{position:fixed;top:0;right:0;width:380px;max-width:90vw;height:100vh;background:#1b1e27;border-left:1px solid #2a2e3a;box-shadow:-8px 0 30px #0007;display:none;flex-direction:column;z-index:50}
 .histpanel.open{display:flex}
 .histpanel .bar{display:flex;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid #2a2e3a}
@@ -166,11 +182,16 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
     </div>
   </div>
   <div class=vgut id=g2></div>
-  <div class=pdf>
-    <div class=bar><span class=muted id=pdfstatus>Press Compile ▶ to build the PDF</span><span class=grow></span>
+  <div class=pdf id=pdfpane>
+    <div class=bar>
+      <button class='tab active' id=tabpdf onclick="showOutput('pdf')">📄 PDF</button>
+      <button class=tab id=tablog onclick="showOutput('log')">📋 Logs</button>
+      <span class=muted id=pdfstatus>Press Compile ▶ to build the PDF</span><span class=grow></span>
+      <a href=# id=rawtoggle class=muted style='display:none;margin-right:10px' onclick="toggleRaw();return false">raw log</a>
       <a id=pdfopen class=muted style='display:none;margin-right:10px' target=_blank>⤢ Open</a>
       <a id=pdfdl class=muted style='display:none' download='output.pdf'>⬇ PDF</a></div>
     <iframe id=pdfframe></iframe>
+    <div class=logview id=logview><div class=logempty>Compile to see errors and warnings here.</div><div class=rawlog id=rawlog></div></div>
   </div>
 </div>
 <div class=histpanel id=histpanel>
@@ -410,16 +431,71 @@ async function compile(){
   compileBtn.disabled=true;pdfstatus.textContent='Compiling…';
   try{
     const r=await fetch(`/project/${pid}/compile`,{method:'POST'});
-    if(!r.ok){pdfstatus.textContent='compile request failed';return}
+    if(!r.ok){pdfstatus.textContent='compile request failed';showOutput('log');renderLog([],'compile request failed ('+r.status+')','error');return}
     const c=(await r.json()).compile||{};
     const pdf=(c.outputFiles||[]).find(f=>f.path==='output.pdf');
-    if(c.status==='success'&&pdf){ pdfframe.src=pdf.url+'?t='+Date.now(); pdfstatus.textContent='✓ compiled'; pdfdl.href=pdf.url; pdfdl.style.display=''; pdfopen.href=pdf.url; pdfopen.style.display=''; }
-    else{
-      pdfstatus.textContent='✗ '+(c.status||'failed')+(c.error?' — '+c.error:'');
-      const log=(c.outputFiles||[]).find(f=>f.path==='output.log');
-      if(log) pdfframe.src=log.url+'?t='+Date.now();
+    const logf=(c.outputFiles||[]).find(f=>f.path==='output.log');
+    let logtxt='';
+    if(logf){ try{ logtxt=await (await fetch(logf.url+'?t='+Date.now())).text(); }catch(e){} }
+    const items=parseLog(logtxt);
+    renderLog(items,logtxt,c.status);
+    const nerr=items.filter(i=>i.type==='error').length;
+    if(c.status==='success'&&pdf){
+      pdfframe.src=pdf.url+'?t='+Date.now(); pdfdl.href=pdf.url; pdfdl.style.display=''; pdfopen.href=pdf.url; pdfopen.style.display='';
+      pdfstatus.textContent=nerr?('⚠ compiled with '+nerr+' issue'+(nerr>1?'s':'')):'✓ compiled';
+      showOutput(nerr?'log':'pdf');
+    } else {
+      pdfstatus.textContent='✗ compile failed'+(nerr?(' — '+nerr+' error'+(nerr>1?'s':'')):'');
+      showOutput('log');
     }
   }finally{ compileBtn.disabled=false }
+}
+// ---- compile log / error panel (Overleaf-style) ------------------------- #
+function parseLog(txt){
+  const items=[], lines=(txt||'').split('\\n');
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if(l.charAt(0)==='!'){
+      let msg=l.replace(/^!\\s*/,''), ln=null;
+      for(let j=i+1;j<Math.min(i+12,lines.length);j++){
+        const m=lines[j].match(/^l\\.(\\d+)\\s?(.*)/);
+        if(m){ ln=parseInt(m[1]); if(m[2]) msg+='  (near: '+m[2].trim()+')'; break; }
+        if(lines[j].charAt(0)==='!') break;
+      }
+      items.push({type:'error',message:msg,line:ln});
+    } else {
+      const w=l.match(/^(?:LaTeX|Package\\s+\\S+|Class\\s+\\S+)\\s+Warning:\\s*(.*)/);
+      if(w){ const lm=l.match(/input line (\\d+)/); items.push({type:'warning',message:w[1].trim(),line:lm?parseInt(lm[1]):null}); }
+    }
+  }
+  return items;
+}
+function renderLog(items,raw,status){
+  const errs=items.filter(i=>i.type==='error').length, warns=items.filter(i=>i.type==='warning').length;
+  tablog.textContent='📋 Logs'+(items.length?(' ('+errs+'⛔ '+warns+'⚠)'):'');
+  rawtoggle.style.display='';
+  let h='';
+  if(!items.length) h='<div class=logempty>'+(status==='success'?'No errors or warnings 🎉':'Compile failed — open the raw log for details.')+'</div>';
+  else for(const it of items){
+    h+='<div class="logitem '+it.type+'"'+(it.line?(' onclick="jumpToLine('+it.line+')"'):'')+'>'
+      +'<div class=lmsg>'+esc(it.message)+'</div>'
+      +'<div class=lmeta>'+(it.type==='error'?'⛔ Error':'⚠ Warning')+(it.line?(' · line '+it.line+' — click to jump'):'')+'</div></div>';
+  }
+  h+='<div class=rawlog id=rawlog>'+esc(raw||'(no log produced)')+'</div>';
+  logview.innerHTML=h;
+}
+function showOutput(which){
+  if(which==='log'){ pdfpane.classList.add('showlog'); tablog.classList.add('active'); tabpdf.classList.remove('active'); }
+  else{ pdfpane.classList.remove('showlog'); tabpdf.classList.add('active'); tablog.classList.remove('active'); }
+}
+function toggleRaw(){ pdfpane.classList.toggle('rawmode'); }
+function jumpToLine(n){
+  if(!curId||!n) return;
+  const lines=ed.value.split('\\n'); let pos=0;
+  for(let i=0;i<n-1&&i<lines.length;i++) pos+=lines[i].length+1;
+  ed.focus(); ed.setSelectionRange(pos,pos+((lines[n-1]||'').length));
+  const lh=parseInt(getComputedStyle(ed).lineHeight)||20; ed.scrollTop=Math.max(0,(n-3)*lh);
+  updateView();
 }
 function togglePdf(){
   const hidden=editorEl.classList.toggle('nopdf');

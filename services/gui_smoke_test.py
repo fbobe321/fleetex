@@ -115,6 +115,16 @@ def main():
 
         page.click("#pdftoggle")
         check("Hide preview toggles pdf pane", page.eval_on_selector(".editor", "e=>e.classList.contains('nopdf')"))
+        page.click("#pdftoggle")  # show preview again for the log-panel check
+
+        # deliberate LaTeX error -> the Logs panel should show a parsed error
+        page.fill("#ed", "\\documentclass{article}\n\\begin{document}\n\\undefinedcommand\n\\end{document}\n")
+        page.click("#compileBtn")
+        page.wait_for_function("document.querySelector('#pdfpane').classList.contains('showlog')", timeout=30000)
+        errcount = page.eval_on_selector_all(".logitem.error", "els=>els.length")
+        errtext = page.eval_on_selector(".logview", "e=>e.textContent") if errcount else ""
+        check("compile error shows in the Logs panel", errcount >= 1,
+              f"{errcount} error(s); e.g. {errtext[:60]!r}")
 
         # delete the second doc via the tree + Delete button
         page.click(f".file[data-id='{did2}']")
@@ -124,14 +134,22 @@ def main():
         gone = page.eval_on_selector_all(".file", "els=>els.every(e=>e.getAttribute('data-id')!=='%s')" % did2)
         check("delete removes the doc from the tree", gone)
 
-        # persistence: reload the whole page (like leaving and reopening the
-        # project) and confirm the saved edit is still there
+        # persistence: reopen the remaining doc (delete closed it), save a final
+        # known doc, then reload the whole page (like leaving and reopening the
+        # project) and confirm it is still there
+        page.click(".file")  # main.tex (the only doc left after the delete)
+        page.wait_for_selector("#ed:not([disabled])", timeout=10000)
+        page.wait_for_function("!document.querySelector('#savebtn').disabled", timeout=10000)
+        final = "\\documentclass{article}\n\\begin{document}\n" + MARK + "-FINAL\n\\end{document}\n"
+        page.fill("#ed", final)
+        page.click("#savebtn")
+        _wait_status(page, "Saved")
         page.reload()
         page.wait_for_selector("#ed:not([disabled])", timeout=15000)
         page.wait_for_function("document.querySelector('#ed').value.length>0", timeout=15000)
         reopened = page.input_value("#ed")
-        check("saved edit persists across a reload", (MARK + "-2") in reopened,
-              "marker " + ("FOUND" if (MARK + "-2") in reopened else "MISSING"))
+        check("saved edit persists across a reload", (MARK + "-FINAL") in reopened,
+              "marker " + ("FOUND" if (MARK + "-FINAL") in reopened else "MISSING"))
 
         browser.close()
         if console_errors:
