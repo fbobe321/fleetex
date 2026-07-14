@@ -17,7 +17,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from .frontend import EDITOR_PAGE
-from .projects import ProjectManager, can_read, can_write, load_with_access
+from .projects import DEFAULT_DOC_LINES, ProjectManager, can_read, can_write, load_with_access
 
 
 # --- tree walking -------------------------------------------------------- #
@@ -202,7 +202,17 @@ def register_editor_routes(app: FastAPI, *, pm: ProjectManager, db, store, confi
             return Response(status_code=404)
         doc = await docstore.get_doc(project_id, doc_id)
         if doc is None:
-            return Response(status_code=404)
+            # Auto-heal: the doc is registered in the project tree but has no
+            # stored content (legacy/pre-seed projects, or a lost doc). Returning
+            # 404 left the editor unable to open it — so it couldn't be saved or
+            # compiled. Seed the default template (empty for non-.tex) and serve
+            # it, persisting to docstore so compile sees it too.
+            lines = list(DEFAULT_DOC_LINES) if pathname.endswith(".tex") else [""]
+            try:
+                await docstore.update_doc(project_id, doc_id, lines, 1)
+            except Exception:  # noqa: BLE001 - healing is best-effort
+                pass
+            doc = {"lines": lines, "version": 1, "ranges": {}}
         if request.query_params.get("plain") == "true":
             return PlainTextResponse("\n".join(doc.get("lines", [])))
         return JSONResponse({

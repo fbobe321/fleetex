@@ -20,6 +20,9 @@ class FakeDocstore:
     async def get_doc(self, project_id, doc_id):
         return self.docs.get(str(doc_id))
 
+    async def update_doc(self, project_id, doc_id, lines, version=0, ranges=None):
+        self.docs[str(doc_id)] = {"lines": lines, "version": version, "ranges": ranges or {}}
+
 
 @pytest.fixture
 def docstore():
@@ -140,9 +143,16 @@ async def test_get_document_not_in_tree_404(app, db, config):
     assert r.status == 404
 
 
-async def test_get_document_missing_in_docstore_404(app, db, config):
+async def test_get_document_missing_in_docstore_auto_heals(app, db, config, docstore):
     owner = await _user(db)
     project = await app.state.projects.create_basic(str(owner["_id"]), "P")
-    # doc is in the tree (rootDoc) but docstore has no content for it
-    r = await call_asgi(app, "GET", f"/project/{project['_id']}/doc/{project['rootDoc_id']}", headers=await _session(app, config, owner))
-    assert r.status == 404
+    did = str(project["rootDoc_id"])
+    # doc is in the tree (rootDoc, main.tex) but docstore has no content for it:
+    # instead of 404, the editor heals it with the default template so it opens,
+    # saves, and compiles.
+    r = await call_asgi(app, "GET", f"/project/{project['_id']}/doc/{did}", headers=await _session(app, config, owner))
+    assert r.status == 200
+    assert r.json["lines"][0].startswith("\\documentclass")
+    assert any("\\end{document}" in ln for ln in r.json["lines"])
+    # and the healed content is persisted to docstore (so compile sees it)
+    assert did in docstore.docs

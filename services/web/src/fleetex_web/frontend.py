@@ -38,6 +38,8 @@ button:hover{filter:brightness(1.1)}
 .proj{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#1b1e27;border:1px solid #2a2e3a;border-radius:10px;margin-bottom:8px}
 .proj .grow{flex:1}.proj .name{font-weight:600}
 .editor{display:grid;grid-template-columns:240px 1fr 1fr;height:calc(100vh - 49px)}
+.editor.nopdf{grid-template-columns:240px 1fr}
+.editor.nopdf .pdf{display:none}
 .tree{border-right:1px solid #2a2e3a;overflow:auto;padding:8px}
 .tree .file{padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;gap:8px}
 .tree .file:hover{background:#2a2e3a}.tree .file.active{background:#2f6fed33}
@@ -140,6 +142,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <span class=muted id=conn>connecting…</span>
   <span class=muted id=status></span>
   <button id=compileBtn onclick=compile()>Compile ▶</button>
+  <button class=ghost id=pdftoggle onclick=togglePdf()>Hide preview</button>
   <button class=ghost onclick=share()>Share</button>
   <button class=ghost onclick=toggleHistory()>🕘 History</button>
   <button class=ghost onclick=newDoc()>New doc</button>
@@ -162,6 +165,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   </div>
   <div class=pdf>
     <div class=bar><span class=muted id=pdfstatus>Press Compile ▶ to build the PDF</span><span class=grow></span>
+      <a id=pdfopen class=muted style='display:none;margin-right:10px' target=_blank>⤢ Open</a>
       <a id=pdfdl class=muted style='display:none' download='output.pdf'>⬇ PDF</a></div>
     <iframe id=pdfframe></iframe>
   </div>
@@ -300,7 +304,8 @@ function applyRemote(p){
   liveDiffSoon();
 }
 async function save(){
-  if(!curId)return;status.textContent='Saving…';
+  if(!curId){status.textContent='Open a document first';setTimeout(()=>status.textContent='',1500);return}
+  status.textContent='Saving…';
   const r=await fetch(`/project/${pid}/doc/${curId}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:ed.value})});
   status.textContent=r.ok?'Saved ✓':'Save failed';setTimeout(()=>status.textContent='',1500);
   if(r.ok) recordVersion('save');
@@ -395,13 +400,17 @@ async function compile(){
     if(!r.ok){pdfstatus.textContent='compile request failed';return}
     const c=(await r.json()).compile||{};
     const pdf=(c.outputFiles||[]).find(f=>f.path==='output.pdf');
-    if(c.status==='success'&&pdf){ pdfframe.src=pdf.url+'?t='+Date.now(); pdfstatus.textContent='✓ compiled'; pdfdl.href=pdf.url; pdfdl.style.display=''; }
+    if(c.status==='success'&&pdf){ pdfframe.src=pdf.url+'?t='+Date.now(); pdfstatus.textContent='✓ compiled'; pdfdl.href=pdf.url; pdfdl.style.display=''; pdfopen.href=pdf.url; pdfopen.style.display=''; }
     else{
       pdfstatus.textContent='✗ '+(c.status||'failed')+(c.error?' — '+c.error:'');
       const log=(c.outputFiles||[]).find(f=>f.path==='output.log');
       if(log) pdfframe.src=log.url+'?t='+Date.now();
     }
   }finally{ compileBtn.disabled=false }
+}
+function togglePdf(){
+  const hidden=document.querySelector('.editor').classList.toggle('nopdf');
+  pdftoggle.textContent=hidden?'Show preview':'Hide preview';
 }
 document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();save()}
