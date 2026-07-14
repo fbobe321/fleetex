@@ -151,7 +151,9 @@ def register_editor_routes(app: FastAPI, *, pm: ProjectManager, db, store, confi
         # fetches this same URL with ?format=json for the bootstrap data.
         wants_html = "text/html" in request.headers.get("accept", "") and request.query_params.get("format") != "json"
         if wants_html:
-            return HTMLResponse(EDITOR_PAGE)
+            # no-store so browsers always load the current editor JS (the page is
+            # tiny and dynamic; stale cached JS caused hard-to-debug behaviour).
+            return HTMLResponse(EDITOR_PAGE, headers={"Cache-Control": "no-store"})
         loaded, err = await load_with_access(request, project_id, pm=pm, store=store, config=config, check=can_read)
         if err:
             return err

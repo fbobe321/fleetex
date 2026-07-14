@@ -270,33 +270,38 @@ async function loadTree(){
 }
 function openDoc(id,type){
   if(id===curId) return;
-  if(curId&&sock) sock.emit('leaveDoc',curId,function(){});
+  if(curId&&sock&&doc) sock.emit('leaveDoc',curId,function(){});
   document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===id));
   if(type==='file'){ed.value='(binary file)';ed.disabled=true;save.disabled=true;delbtn.disabled=false;curId=id;doc=null;cur.textContent='binary file';return}
-  if(!sock){return httpOpen(id)}
+  // HTTP-first: open reliably over HTTP so the doc is immediately editable /
+  // saveable / deletable, independent of the live-sync websocket. Then try to
+  // upgrade to live collaboration on top (best-effort).
+  doc=null;
+  httpOpen(id).then(function(){ if(sock&&curId===id) upgradeLive(id); });
+}
+function upgradeLive(id){
+  const baseline=ed.value;
   sock.emit('joinDoc',id,-1,{},function(err,lines,version){
-    if(err){setConn('🔴 join failed');if(curId!==id)httpOpen(id);return}
-    if(curId===id) return;  // HTTP fallback already opened it — don't clobber the buffer
-    curId=id;
+    // bail if join failed, the user switched docs, or already started typing
+    if(err||curId!==id||ed.value!==baseline) return;
     const snap=(lines||['']).join('\\n');
     doc=new Fleetex.CollabDoc(snap,version||0,function(u){sock.emit('applyOtUpdate',id,{op:u.op,v:u.v,meta:{}})});
-    ed.value=snap;lastValue=snap;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · live';
-    updateView(); requestPresence(); sendCursor(); renderCursors(); refreshHistoryIfOpen();
+    ed.value=snap;lastValue=snap;updateView();cur.textContent=fileLabel(id)+' · live';
+    requestPresence(); sendCursor(); renderCursors();
   });
-  // if live-sync doesn't respond quickly, open over HTTP so the doc is still
-  // editable/saveable/deletable (curId set) rather than leaving it stuck
-  setTimeout(function(){ if(curId!==id) httpOpen(id); }, 2500);
 }
-async function httpOpen(id){ // fallback when socket unavailable
+async function httpOpen(id){
   const r=await fetch(`/project/${pid}/doc/${id}?plain=true`); if(!r.ok){cur.textContent='could not load';return}
-  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · offline';updateView();refreshHistoryIfOpen();
+  ed.value=await r.text();lastValue=ed.value;doc=null;curId=id;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · editing';updateView();refreshHistoryIfOpen();
 }
 ed.addEventListener('input',function(){
   if(applyingRemote) return;
   if(doc){ const op=Fleetex.makeOp(lastValue,ed.value); lastValue=ed.value; if(op.length) doc.submitLocal(op); }
-  else lastValue=ed.value;
+  else { lastValue=ed.value; autosaveSoon(); }
   updateView(); sendCursorSoon(); renderCursors(); liveDiffSoon();
 });
+let autosaveTimer=null;
+function autosaveSoon(){ if(doc||!curId) return; if(autosaveTimer) clearTimeout(autosaveTimer); autosaveTimer=setTimeout(function(){autosaveTimer=null;save();},1200); }
 function applyRemote(p){
   applyingRemote=true;
   const s=ed.selectionStart,e=ed.selectionEnd;
@@ -452,7 +457,7 @@ def register_frontend_routes(app: FastAPI, *, config, store, users: UserManager)
 
     @app.get("/assets/collab.js")
     async def collab_js():
-        return Response(COLLAB_JS, media_type="application/javascript")
+        return Response(COLLAB_JS, media_type="application/javascript", headers={"Cache-Control": "no-store"})
 
     @app.post("/register")
     async def register(request: Request):
