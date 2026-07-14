@@ -94,6 +94,7 @@ def main():
             made = False
         dialog_value["v"] = ""
         check("New folder creates a folder in the tree", made, fname)
+        check("empty folder shows an (empty) hint", page.eval_on_selector_all(".tree .emptyfolder", "e=>e.length") >= 1)
 
         body = "\\documentclass{article}\n\\begin{document}\n" + MARK + "\n\\end{document}\n"
         page.fill("#ed", body)
@@ -165,6 +166,22 @@ def main():
         reopened = page.input_value("#ed")
         check("saved edit persists across a reload", (MARK + "-FINAL") in reopened,
               "marker " + ("FOUND" if (MARK + "-FINAL") in reopened else "MISSING"))
+
+        # put a doc INSIDE the folder: select the folder, then New doc -> it
+        # should render nested (indented) under the folder
+        page.click(".tree .folder")
+        dialog_value["v"] = "inside.tex"
+        page.click("button:has-text('New doc')")
+        try:
+            page.wait_for_function(
+                "[...document.querySelectorAll(\".tree .file[data-type='doc']\")]"
+                ".some(e=>e.textContent.includes('inside.tex') && parseInt(getComputedStyle(e).paddingLeft)>10)",
+                timeout=8000)
+            nested = True
+        except Exception:
+            nested = False
+        dialog_value["v"] = ""
+        check("a doc created inside a folder is nested under it", nested, "inside.tex indented")
 
         browser.close()
         if console_errors:

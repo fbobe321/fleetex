@@ -47,6 +47,8 @@ button:hover{filter:brightness(1.1)}
 .tree .treehdr{padding:6px 8px;font-size:12px;color:#8a90a2;cursor:pointer;border-bottom:1px solid #2a2e3a;margin-bottom:4px;display:flex;gap:6px;align-items:center}
 .tree .treehdr:hover{color:#e6e8ee}
 .tree .folder{font-weight:600}
+.tree .file.active{background:#2f6fed44;outline:1px solid #2f6fed}
+.tree .emptyfolder{color:#5b6270;font-size:12px;font-style:italic;padding:3px 8px}
 .pane{display:flex;flex-direction:column;min-width:0}
 .pane .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
 .edwrap{flex:1;display:flex;min-height:0;background:#0e1016;overflow:hidden}
@@ -294,14 +296,21 @@ ed.addEventListener('keydown',function(e){
 let curFolder=null, curFolderName='';
 async function loadTree(){
   const d=await (await fetch(`/project/${pid}/tree`)).json();
-  let h='<div class=treehdr onclick="selectFolder(null,null)">📂 new items → '+(curFolder?esc(curFolderName):'project root')+'</div>';
-  h+=(d.entities||[]).map(e=>{
+  const ents=d.entities||[], paths=ents.map(e=>e.path);
+  const hasKids=fp=>paths.some(p=>p!==fp&&p.startsWith(fp+'/'));
+  let h='<div class=treehdr onclick="selectFolder(null,null)">📂 new items → '+(curFolder?('📁 '+esc(curFolderName)):'project root')+'</div>';
+  let rows='';
+  for(const e of ents){
     const depth=Math.max(0,e.path.split('/').length-2), name=e.path.split('/').pop();
     const pad="padding-left:"+(8+depth*14)+"px";
-    if(e.type==='folder') return `<div class="file folder" style="${pad}" data-id='${e.id}' data-type=folder onclick="selectFolder('${e.id}',this)">📁 ${esc(name)}</div>`;
-    return `<div class=file style="${pad}" data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')">${e.type==='doc'?'📄':'📎'} ${esc(name)}</div>`;
-  }).join('')||'<div class=muted>Empty — use New doc / New folder</div>';
-  tree.innerHTML=h;
+    if(e.type==='folder'){
+      rows+=`<div class="file folder" style="${pad}" data-id='${e.id}' data-type=folder title='Click to add new items here' onclick="selectFolder('${e.id}',this)">📁 ${esc(name)}</div>`;
+      if(!hasKids(e.path)) rows+=`<div class=emptyfolder style="padding-left:${8+(depth+1)*14}px">(empty — select it, then New doc)</div>`;
+    } else {
+      rows+=`<div class=file style="${pad}" data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')">${e.type==='doc'?'📄':'📎'} ${esc(name)}</div>`;
+    }
+  }
+  tree.innerHTML=h+(rows||'<div class=muted>Empty — use New doc / New folder</div>');
   document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===curId||f.dataset.id===curFolder));
 }
 function selectFolder(id,el){ curFolder=id; curFolderName=el?el.textContent.replace('📁','').trim():''; loadTree(); }
