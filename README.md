@@ -116,6 +116,55 @@ These ship in the repo's `services/` tree, which the `python` edition builds fro
 source — so `git pull` on your checkout (then `fleetex up`) delivers editor
 updates without needing a launcher upgrade.
 
+### Run without Docker (advanced)
+
+Docker just bundles the dependencies and orchestration — the services themselves
+are plain Python ASGI apps (`python -m fleetex_web`, etc.). You can run the stack
+directly if you'd rather manage the dependencies yourself.
+
+**Prerequisites (install however you like):**
+
+- **MongoDB** and **Redis** running locally
+- **TeX Live** + `latexmk` (only for the `clsi` compile service)
+- **Python 3.10+**
+
+**Install the packages from a checkout:**
+
+```bash
+pip install -e services/_kit
+for s in web real-time document-updater docstore filestore clsi chat notifications project-history; do
+  pip install -e "services/$s"
+done
+```
+
+**Shared environment** (every service reads these; the secret must match between
+`web` and `real-time`):
+
+```bash
+export MONGO_URL=mongodb://localhost:27017/sharelatex
+export REDIS_URL=redis://localhost:6379
+export SESSION_SECRET=change-me
+```
+
+**Start each service** (own terminal, or `&`). Cross-service URLs point at
+`localhost` instead of Docker service names:
+
+| Service | Command | Port |
+| --- | --- | --- |
+| docstore | `python -m fleetex_docstore` | 3016 |
+| filestore | `BACKEND=fs FILESTORE_PATH=./data/filestore python -m fleetex_filestore` | 3009 |
+| clsi | `python -m fleetex_clsi` (needs TeX Live) | 3013 |
+| chat | `python -m fleetex_chat` | 3010 |
+| notifications | `python -m fleetex_notifications` | 3042 |
+| project-history | `DOCUMENT_UPDATER_URL=http://localhost:3003 python -m fleetex_project_history` | 3054 |
+| document-updater | `DOCSTORE_URL=http://localhost:3016 PROJECT_HISTORY_URL=http://localhost:3054 python -m fleetex_document_updater` | 3003 |
+| web | `DOCSTORE_URL=http://localhost:3016 CLSI_URL=http://localhost:3013 DOCUMENT_UPDATER_URL=http://localhost:3003 FILESTORE_URL=http://localhost:3009 PROJECT_HISTORY_URL=http://localhost:3054 WEBSOCKET_URL=http://localhost:3026 python -m fleetex_web` | 3000 |
+| real-time | `WEB_HOST=localhost WEB_PORT=3000 DOCUMENT_UPDATER_HOST=localhost python -m fleetex_realtime` | 3026 |
+
+Then open **http://localhost:3000**. (This is exactly what the compose file wires
+up for you — Docker is the convenience, not a requirement. The full test suite,
+300+ tests, likewise runs with **no Docker** via in-memory Mongo/Redis fakes.)
+
 ---
 
 ## Why this exists
