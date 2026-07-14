@@ -132,7 +132,12 @@ That's exactly what this is.
 
 - Linux server with **Docker Engine** + the **Docker Compose v2 plugin**
   (`docker compose version` must work).
-- **Python 3.9+**.
+- **Python 3.9+** (for the `fleetex` CLI; the services run Python inside containers).
+- **git** — only for the python edition when no `--source` is given (used to clone the stack).
+- **~6 GB free disk** (clsi ships TeX Live) and a couple of GB of RAM.
+
+Run **`fleetex doctor`** to check all of the above and report anything missing
+before you `fleetex up`.
 
 ## Install
 
@@ -169,6 +174,8 @@ self-hosted Overleaf.
 | `fleetex open` | Open the web UI in a browser |
 | `fleetex create-admin <email>` | Create the first admin user |
 | `fleetex exec <service> <cmd...>` | Run a command in a container (e.g. `exec sharelatex bash`) |
+| `fleetex doctor` | Check prerequisites (Docker, Compose v2, git, disk) |
+| `fleetex backup` / `restore` | Back up / restore data (projects, docs, uploads) |
 | `fleetex config [--port N ...]` | View or change settings and re-render the compose file |
 | `fleetex version` | Show launcher + Docker versions |
 

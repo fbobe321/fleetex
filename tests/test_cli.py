@@ -179,6 +179,34 @@ def test_backup_ce_tars_data_dir(tmp_path: Path, monkeypatch):
     assert any("ce-data.tar.gz" in c and str(cfg.data_path) in c for c in cmds)
 
 
+# --- doctor --------------------------------------------------------------- #
+def test_parser_accepts_doctor():
+    assert hasattr(build_parser().parse_args(["doctor"]), "func")
+
+
+def test_doctor_checks_report_python_and_docker(tmp_path: Path):
+    from fleetex import doctor
+
+    cfg = Config.load(tmp_path)
+    checks = doctor.run_checks(cfg)
+    names = [n for n, _s, _d in checks]
+    assert any("Python" in n for n in names)
+    assert any("Docker CLI" in n for n in names)
+    # Python-version check always passes on a supported interpreter
+    py = next(c for c in checks if "Python" in c[0])
+    assert py[1] == doctor.OK
+    assert doctor.summarize(checks) in (doctor.OK, doctor.WARN, doctor.FAIL)
+
+
+def test_doctor_command_runs(tmp_path: Path, capsys):
+    from fleetex.cli import main
+
+    rc = main(["--home", str(tmp_path), "doctor"])
+    assert rc in (0, 1)
+    out = capsys.readouterr().out
+    assert "fleetex doctor" in out and "Docker CLI" in out
+
+
 def test_restore_python_untars_into_volumes(tmp_path: Path, monkeypatch):
     from fleetex import backup as bk
 

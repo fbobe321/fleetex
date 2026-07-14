@@ -25,6 +25,7 @@ from .backup import backup as do_backup
 from .backup import restore as do_restore
 from .compose import DockerError, capture, ensure_ready, run
 from .config import Config
+from .doctor import FAIL, OK, WARN, run_checks, summarize
 
 
 def _err(msg: str) -> int:
@@ -244,6 +245,28 @@ def cmd_restore(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    cfg = _load(args)
+    print(f"fleetex doctor  (edition: {cfg.edition})\n")
+    symbol = {OK: "✅", WARN: "⚠️ ", FAIL: "❌"}
+    checks = run_checks(cfg)
+    for name, sev, detail in checks:
+        line = f"  {symbol[sev]} {name}"
+        if detail:
+            line += f"\n       {detail}"
+        print(line)
+    worst = summarize(checks)
+    print()
+    if worst == FAIL:
+        print("Some requirements are missing — fix the ❌ items above, then `fleetex up`.")
+        return 1
+    if worst == WARN:
+        print("Ready, with warnings (⚠️ ) — `fleetex up` should work.")
+        return 0
+    print("All good ✅  — `fleetex up` should work.")
+    return 0
+
+
 def cmd_version(args: argparse.Namespace) -> int:
     cfg = _load(args)
     if cfg.is_python:
@@ -339,6 +362,9 @@ def build_parser() -> argparse.ArgumentParser:
     rst = sub.add_parser("restore", help="Restore data from a backup folder (OVERWRITES current data)")
     rst.add_argument("source", help="Path to a fleetex-backup-* folder created by `fleetex backup`")
     rst.set_defaults(func=cmd_restore)
+
+    dr = sub.add_parser("doctor", help="Check prerequisites (Docker, Compose, git, disk)")
+    dr.set_defaults(func=cmd_doctor)
 
     vs = sub.add_parser("version", help="Show launcher and Docker versions")
     vs.set_defaults(func=cmd_version)
