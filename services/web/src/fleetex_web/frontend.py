@@ -275,13 +275,17 @@ function openDoc(id,type){
   if(type==='file'){ed.value='(binary file)';ed.disabled=true;save.disabled=true;delbtn.disabled=false;curId=id;doc=null;cur.textContent='binary file';return}
   if(!sock){return httpOpen(id)}
   sock.emit('joinDoc',id,-1,{},function(err,lines,version){
-    if(err){setConn('🔴 join failed');return httpOpen(id)}
+    if(err){setConn('🔴 join failed');if(curId!==id)httpOpen(id);return}
+    if(curId===id) return;  // HTTP fallback already opened it — don't clobber the buffer
     curId=id;
     const snap=(lines||['']).join('\\n');
     doc=new Fleetex.CollabDoc(snap,version||0,function(u){sock.emit('applyOtUpdate',id,{op:u.op,v:u.v,meta:{}})});
     ed.value=snap;lastValue=snap;ed.disabled=false;save.disabled=false;delbtn.disabled=false;cur.textContent=fileLabel(id)+' · live';
     updateView(); requestPresence(); sendCursor(); renderCursors(); refreshHistoryIfOpen();
   });
+  // if live-sync doesn't respond quickly, open over HTTP so the doc is still
+  // editable/saveable/deletable (curId set) rather than leaving it stuck
+  setTimeout(function(){ if(curId!==id) httpOpen(id); }, 2500);
 }
 async function httpOpen(id){ // fallback when socket unavailable
   const r=await fetch(`/project/${pid}/doc/${id}?plain=true`); if(!r.ok){cur.textContent='could not load';return}
@@ -393,7 +397,7 @@ async function doUpload(){
 async function newDoc(){const n=prompt('New document name (e.g. chapter.tex):');if(!n)return;const r=await fetch(`/project/${pid}/doc`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n})});if(r.ok){await loadTree();const d=await r.json();openDoc(d._id,'doc')}else alert('Could not create document')}
 async function delDoc(){if(!curId||!confirm('Delete this entity?'))return;const f=document.querySelector(`.file[data-id='${curId}']`);const type=f?f.dataset.type:'doc';await fetch(`/project/${pid}/${type}/${curId}`,{method:'DELETE'});curId=null;doc=null;ed.value='';save.disabled=true;delbtn.disabled=true;cur.textContent='No document open';loadTree()}
 async function compile(){
-  if(doc) await save().catch(()=>{});  // flush current doc so the compile sees it
+  if(curId) await save().catch(()=>{});  // flush current buffer so the compile sees it
   compileBtn.disabled=true;pdfstatus.textContent='Compiling…';
   try{
     const r=await fetch(`/project/${pid}/compile`,{method:'POST'});

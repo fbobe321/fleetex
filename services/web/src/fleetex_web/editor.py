@@ -172,6 +172,14 @@ def register_editor_routes(app: FastAPI, *, pm: ProjectManager, db, store, confi
         if lines is None:
             lines = (body.get("content") or "").split("\n")
         await docstore.update_doc(project_id, doc_id, lines, body.get("version", 0), body.get("ranges", {}))
+        # Also push the saved content into document-updater (the live doc), since
+        # that is what a compile reads. This makes save/compile reliable even when
+        # the live OT websocket sync is unavailable or flaky.
+        try:
+            async with httpx.AsyncClient(timeout=10) as h:
+                await h.post(f"{config.document_updater_url}/project/{project_id}/doc/{doc_id}", json={"lines": lines})
+        except Exception:  # noqa: BLE001 - best-effort live-doc sync
+            pass
         return JSONResponse({"saved": True})
 
     @app.get("/project/{project_id}/entities")
