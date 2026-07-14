@@ -94,6 +94,28 @@ fleetex up            # start it once; it now returns after every reboot
 (`fleetex down` stops it and keeps it stopped across reboots until the next
 `fleetex up`.)
 
+### Editor features
+
+The browser editor (served by the `web` service) supports:
+
+- **Live collaborative-ready editing** over HTTP with autosave; LaTeX syntax
+  highlighting, a line gutter, and Tab→spaces.
+- **Compile to PDF** with an inline preview, plus an Overleaf-style **Logs**
+  panel that parses compile errors/warnings (click an error to jump to the line)
+  and a raw-log view.
+- **File tree with folders** — create folders, drag-and-drop docs/files between
+  them, upload into a selected folder, and nested display.
+- **Version history** — every save is a version; browse them, see a live diff
+  against your current text, and restore.
+- **Sharing** by email, **live cursors/presence**, and image includes.
+- **Download the whole project** as a zip (all files + the compiled `output.pdf`)
+  from the dashboard or the editor toolbar.
+- **Resizable panes** (drag the dividers) and a togglable preview.
+
+These ship in the repo's `services/` tree, which the `python` edition builds from
+source — so `git pull` on your checkout (then `fleetex up`) delivers editor
+updates without needing a launcher upgrade.
+
 ---
 
 ## Why this exists
