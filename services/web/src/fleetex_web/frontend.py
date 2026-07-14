@@ -30,6 +30,8 @@ input{width:100%;padding:10px;margin:8px 0;background:#12141a;border:1px solid #
 button{cursor:pointer;background:#2f6fed;border:0;color:#fff;padding:10px 14px;border-radius:8px;font-weight:600}
 button.ghost{background:#2a2e3a}
 button:hover{filter:brightness(1.1)}
+a.ghostbtn{cursor:pointer;background:#2a2e3a;color:#fff;padding:10px 14px;border-radius:8px;font-weight:600;text-decoration:none;font-size:14px;white-space:nowrap}
+a.ghostbtn:hover{filter:brightness(1.1)}
 .err{color:#ff6b6b;min-height:18px;font-size:13px}
 .top{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#1b1e27;border-bottom:1px solid #2a2e3a}
 .top .grow{flex:1}
@@ -151,7 +153,7 @@ async function load(){
   if(r.status===401){location.href='/login';return}
   const d=await r.json();
   if(!d.projects.length){list.innerHTML='<div class=muted>No projects yet. Create one!</div>';return}
-  list.innerHTML=d.projects.map(p=>`<div class=proj><div class=grow><div class=name><a href='/project/${p.id}'>${esc(p.name)}</a></div><div class=muted>${p.accessLevel} · ${p.lastUpdated?new Date(p.lastUpdated).toLocaleString():''}</div></div><button class=ghost onclick="del('${p.id}')">Delete</button></div>`).join('');
+  list.innerHTML=d.projects.map(p=>`<div class=proj><div class=grow><div class=name><a href='/project/${p.id}'>${esc(p.name)}</a></div><div class=muted>${p.accessLevel} · ${p.lastUpdated?new Date(p.lastUpdated).toLocaleString():''}</div></div><a class=ghostbtn href='/project/${p.id}/download/zip' download>⬇ Download</a><button class=ghost onclick="del('${p.id}')">Delete</button></div>`).join('');
 }
 function esc(s){return (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
 async function newProject(){const n=prompt('Project name:');if(!n)return;const r=await fetch('/project/new',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({projectName:n})});if(r.ok){const d=await r.json();location.href='/project/'+d.project_id}else alert('Could not create project')}
@@ -172,6 +174,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <button class=ghost onclick=newDoc()>New doc</button>
   <button class=ghost onclick=newFolder()>New folder</button>
   <button class=ghost onclick=fileinput.click()>Upload</button>
+  <button class=ghost onclick="location.href='/project/'+pid+'/download/zip'">⬇ Download</button>
   <input type=file id=fileinput style=display:none onchange=doUpload()></div>
 <div class=editor id=editorEl>
   <div class=tree id=tree></div>

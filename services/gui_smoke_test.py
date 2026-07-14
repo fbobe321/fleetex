@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 
 import httpx
 from playwright.sync_api import sync_playwright
@@ -225,6 +226,19 @@ def main():
             up_nested = False
         os.remove(tmpf)
         check("upload goes into the selected folder", up_nested)
+
+        # compile so a PDF exists, then download the whole project as a zip and
+        # confirm it contains the source files AND the compiled output.pdf
+        page.click("#compileBtn")
+        _wait_text(page, "#pdfstatus", "compiled", 30000)
+        try:
+            with page.expect_download(timeout=15000) as dl:
+                page.click("button:has-text('Download')")
+            names = zipfile.ZipFile(dl.value.path()).namelist()
+            zipped = any(n.endswith(".tex") for n in names) and "output.pdf" in names
+        except Exception:
+            names, zipped = [], False
+        check("download includes the files and the compiled PDF", zipped, str(names[:5]))
 
         browser.close()
         if console_errors:

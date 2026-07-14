@@ -156,3 +156,33 @@ async def test_get_document_missing_in_docstore_auto_heals(app, db, config, docs
     assert any("\\end{document}" in ln for ln in r.json["lines"])
     # and the healed content is persisted to docstore (so compile sees it)
     assert did in docstore.docs
+
+
+async def test_download_zip_contains_docs(app, db, config, docstore):
+    import io
+    import zipfile
+
+    import httpx
+
+    owner = await _user(db)
+    project = await app.state.projects.create_basic(str(owner["_id"]), "My Proj")
+    did = str(project["rootDoc_id"])
+    docstore.docs[did] = {"lines": ["line-a", "line-b"], "version": 1, "ranges": {}}
+    headers = await _session(app, config, owner)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://svc") as client:
+        r = await client.get(f"/project/{project['_id']}/download/zip", headers=headers)
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    assert "My_Proj.zip" in r.headers.get("content-disposition", "")
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    assert "main.tex" in z.namelist()
+    assert z.read("main.tex").decode() == "line-a\nline-b"
+
+
+async def test_download_zip_requires_access(app, db, config):
+    owner = await _user(db, "owner@x.com")
+    stranger = await _user(db, "s@x.com")
+    project = await app.state.projects.create_basic(str(owner["_id"]), "P")
+    r = await call_asgi(app, "GET", f"/project/{project['_id']}/download/zip", headers=await _session(app, config, stranger))
+    assert r.status in (401, 403)

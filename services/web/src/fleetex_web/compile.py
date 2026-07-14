@@ -94,10 +94,18 @@ def register_compile_routes(app: FastAPI, *, pm: ProjectManager, store, config, 
             return err
         _uid, project = loaded
         result = await clsi.compile(project_id, project)
+        outs = result.get("compile", {}).get("outputFiles", [])
         # rewrite output-file URLs to web-proxied, single-origin paths
-        for f in result.get("compile", {}).get("outputFiles", []):
+        for f in outs:
             if f.get("build") and f.get("path"):
                 f["url"] = f"/project/{project_id}/output/{f['build']}/{f['path']}"
+        # remember the latest build that produced a PDF, so the zip download can
+        # include it (in-memory; recomputed on the next compile after a restart)
+        pdf = next((f for f in outs if f.get("path") == "output.pdf" and f.get("build")), None)
+        if pdf:
+            if not hasattr(app.state, "last_build"):
+                app.state.last_build = {}
+            app.state.last_build[project_id] = pdf["build"]
         return JSONResponse(result)
 
     @app.get("/project/{project_id}/output/{build_id}/{file_path:path}")

@@ -163,6 +163,7 @@ def build_app(config: WebConfig | None = None, *, db=None, redis=None, docstore=
     register_editor_routes(app, pm=projects, db=db, store=store, config=config, docstore=docstore)
 
     filestore = filestore if filestore is not None else FilestoreClient(config.filestore_url)
+    app.state.filestore = filestore  # used by the project-zip download route
     events = events if events is not None else EditorEventsPublisher(redis)
     ft = FileTreeManager(db, docstore, filestore, events)
     app.state.file_tree = ft

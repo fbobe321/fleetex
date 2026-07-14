@@ -11,6 +11,10 @@ The join model view stays in the auth-slice ``/project/:id/join`` endpoint.
 
 from __future__ import annotations
 
+import io
+import re
+import zipfile
+
 import httpx
 from bson import ObjectId
 from fastapi import FastAPI, Request, Response
@@ -209,6 +213,42 @@ def register_editor_routes(app: FastAPI, *, pm: ProjectManager, db, store, confi
             return err
         _uid, project = loaded
         return JSONResponse({"project_id": project_id, "entities": list_entities_with_ids(project)})
+
+    @app.get("/project/{project_id}/download/zip")
+    async def download_zip(project_id: str, request: Request):
+        loaded, err = await load_with_access(request, project_id, pm=pm, store=store, config=config, check=can_read)
+        if err:
+            return err
+        _uid, project = loaded
+        filestore = getattr(request.app.state, "filestore", None)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for e in list_entities_with_ids(project):
+                path = e["path"].lstrip("/")
+                if e["type"] == "doc":
+                    doc = await docstore.get_doc(project_id, e["id"])
+                    z.writestr(path, "\n".join(doc.get("lines", [])) if doc else "")
+                elif e["type"] == "file":
+                    data = (await filestore.get(project_id, e["id"])) if filestore else None
+                    z.writestr(path, data or b"")
+                elif e["type"] == "folder":
+                    z.writestr(path.rstrip("/") + "/", "")  # keep empty folders
+            # include the last compiled PDF, if there is one
+            clsi = getattr(request.app.state, "clsi", None)
+            build_id = getattr(request.app.state, "last_build", {}).get(project_id)
+            if clsi and build_id:
+                try:
+                    resp = await clsi.get_output(project_id, build_id, "output.pdf")
+                    if resp.status_code == 200 and resp.content[:4] == b"%PDF":
+                        z.writestr("output.pdf", resp.content)
+                except Exception:  # noqa: BLE001 - PDF is a bonus; never fail the download
+                    pass
+        safe = re.sub(r'[^A-Za-z0-9._-]+', "_", project.get("name") or "project").strip("_") or "project"
+        return Response(
+            buf.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe}.zip"'},
+        )
 
     @app.get("/project/{project_id}/doc/{doc_id}")
     async def get_document(project_id: str, doc_id: str, request: Request):

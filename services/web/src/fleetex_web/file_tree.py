@@ -155,6 +155,17 @@ class FilestoreClient:
                 pass
         return digest
 
+    async def get(self, project_id: str, file_id: str) -> bytes | None:
+        """Fetch a stored binary (used by the project zip download)."""
+        if not self.base_url:
+            return None
+        try:
+            client = self.http or httpx.AsyncClient(timeout=30)
+            resp = await client.get(f"{self.base_url}/project/{project_id}/file/{file_id}")
+            return resp.content if resp.status_code == 200 else None
+        except Exception:  # noqa: BLE001
+            return None
+
 
 class EditorEventsPublisher:
     """Publishes editor-events to Redis in the shape real-time consumes."""
