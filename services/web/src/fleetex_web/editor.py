@@ -59,14 +59,17 @@ def list_entities_with_ids(project: dict) -> list[dict]:
     entities: list[dict] = []
 
     def walk(folder: dict, prefix: str) -> None:
+        for sub in folder.get("folders", []):
+            path = f"{prefix}/{sub['name']}"
+            entities.append({"id": str(sub["_id"]), "path": path, "type": "folder"})
+            walk(sub, path)
         for doc in folder.get("docs", []):
             entities.append({"id": str(doc["_id"]), "path": f"{prefix}/{doc['name']}", "type": "doc"})
         for file_ref in folder.get("fileRefs", []):
             entities.append({"id": str(file_ref["_id"]), "path": f"{prefix}/{file_ref['name']}", "type": "file"})
-        for sub in folder.get("folders", []):
-            walk(sub, f"{prefix}/{sub['name']}")
 
     walk(_root(project), "")
+    # sort by path so a folder sorts immediately before its contents
     return sorted(entities, key=lambda e: e["path"])
 
 

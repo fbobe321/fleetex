@@ -65,7 +65,8 @@ def main():
         ctx = browser.new_context()
         ctx.add_cookies([{"name": "overleaf.sid", "value": cookie, "url": BASE}])
         page = ctx.new_page()
-        page.on("dialog", lambda d: d.accept())  # auto-accept confirm() for delete
+        dialog_value = {"v": ""}  # prompt() answers; confirm() ignores the value
+        page.on("dialog", lambda d: d.accept(dialog_value["v"]))
         console_errors = []
         page.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda e: console_errors.append(f"PAGEERROR: {e}"))
@@ -79,6 +80,20 @@ def main():
         # the Save button must actually be enabled (regression: id=save vs save())
         check("Save button is enabled after open", not page.get_attribute("#savebtn", "disabled") == "",
               f"disabled={page.get_attribute('#savebtn', 'disabled')}")
+
+        # create a folder in the file tree via the New folder button
+        fname = "chapters" + str(int(time.time()))[-4:]
+        dialog_value["v"] = fname
+        page.click("button:has-text('New folder')")
+        try:
+            page.wait_for_function(
+                "[...document.querySelectorAll('.tree .folder')].some(e=>e.textContent.includes('%s'))" % fname,
+                timeout=8000)
+            made = True
+        except Exception:
+            made = False
+        dialog_value["v"] = ""
+        check("New folder creates a folder in the tree", made, fname)
 
         body = "\\documentclass{article}\n\\begin{document}\n" + MARK + "\n\\end{document}\n"
         page.fill("#ed", body)
@@ -137,7 +152,7 @@ def main():
         # persistence: reopen the remaining doc (delete closed it), save a final
         # known doc, then reload the whole page (like leaving and reopening the
         # project) and confirm it is still there
-        page.click(".file")  # main.tex (the only doc left after the delete)
+        page.click(".file[data-type='doc']")  # a doc (folders also render as .file now)
         page.wait_for_selector("#ed:not([disabled])", timeout=10000)
         page.wait_for_function("!document.querySelector('#savebtn').disabled", timeout=10000)
         final = "\\documentclass{article}\n\\begin{document}\n" + MARK + "-FINAL\n\\end{document}\n"

@@ -44,6 +44,9 @@ button:hover{filter:brightness(1.1)}
 .tree{border-right:1px solid #2a2e3a;overflow:auto;padding:8px}
 .tree .file{padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;gap:8px}
 .tree .file:hover{background:#2a2e3a}.tree .file.active{background:#2f6fed33}
+.tree .treehdr{padding:6px 8px;font-size:12px;color:#8a90a2;cursor:pointer;border-bottom:1px solid #2a2e3a;margin-bottom:4px;display:flex;gap:6px;align-items:center}
+.tree .treehdr:hover{color:#e6e8ee}
+.tree .folder{font-weight:600}
 .pane{display:flex;flex-direction:column;min-width:0}
 .pane .bar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #2a2e3a}
 .edwrap{flex:1;display:flex;min-height:0;background:#0e1016;overflow:hidden}
@@ -163,6 +166,7 @@ EDITOR_PAGE = _page("Fleetex — Editor", """
   <button class=ghost onclick=share()>Share</button>
   <button class=ghost onclick=toggleHistory()>🕘 History</button>
   <button class=ghost onclick=newDoc()>New doc</button>
+  <button class=ghost onclick=newFolder()>New folder</button>
   <button class=ghost onclick=fileinput.click()>Upload</button>
   <input type=file id=fileinput style=display:none onchange=doUpload()></div>
 <div class=editor id=editorEl>
@@ -287,10 +291,24 @@ ed.addEventListener('scroll',function(){ hl.scrollTop=ed.scrollTop; hl.scrollLef
 ed.addEventListener('keydown',function(e){
   if(e.key==='Tab'){ e.preventDefault(); const s=ed.selectionStart,en=ed.selectionEnd; ed.value=ed.value.slice(0,s)+'  '+ed.value.slice(en); ed.selectionStart=ed.selectionEnd=s+2; ed.dispatchEvent(new Event('input')); }
 });
+let curFolder=null, curFolderName='';
 async function loadTree(){
   const d=await (await fetch(`/project/${pid}/tree`)).json();
-  tree.innerHTML=d.entities.map(e=>`<div class=file data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')">${e.type==='doc'?'📄':'📎'} ${esc(e.path.slice(1))}</div>`).join('')||'<div class=muted>Empty</div>';
-  document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===curId));
+  let h='<div class=treehdr onclick="selectFolder(null,null)">📂 new items → '+(curFolder?esc(curFolderName):'project root')+'</div>';
+  h+=(d.entities||[]).map(e=>{
+    const depth=Math.max(0,e.path.split('/').length-2), name=e.path.split('/').pop();
+    const pad="padding-left:"+(8+depth*14)+"px";
+    if(e.type==='folder') return `<div class="file folder" style="${pad}" data-id='${e.id}' data-type=folder onclick="selectFolder('${e.id}',this)">📁 ${esc(name)}</div>`;
+    return `<div class=file style="${pad}" data-id='${e.id}' data-type='${e.type}' onclick="openDoc('${e.id}','${e.type}')">${e.type==='doc'?'📄':'📎'} ${esc(name)}</div>`;
+  }).join('')||'<div class=muted>Empty — use New doc / New folder</div>';
+  tree.innerHTML=h;
+  document.querySelectorAll('.file').forEach(f=>f.classList.toggle('active',f.dataset.id===curId||f.dataset.id===curFolder));
+}
+function selectFolder(id,el){ curFolder=id; curFolderName=el?el.textContent.replace('📁','').trim():''; loadTree(); }
+async function newFolder(){
+  const n=prompt('New folder name'+(curFolder?(' (inside '+curFolderName+')'):'')+':'); if(!n) return;
+  const r=await fetch(`/project/${pid}/folder`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n,parent_folder_id:curFolder})});
+  if(r.ok) loadTree(); else { const d=await r.json().catch(()=>({})); alert('Could not create folder: '+((d.message&&d.message.text)||'error')); }
 }
 function openDoc(id,type){
   if(id===curId) return;
@@ -418,13 +436,13 @@ async function share(){
 }
 async function doUpload(){
   const f=fileinput.files[0]; if(!f) return;
-  const fd=new FormData(); fd.append('qqfile',f); fd.append('name',f.name);
+  const fd=new FormData(); fd.append('qqfile',f); fd.append('name',f.name); if(curFolder) fd.append('folder_id',curFolder);
   statusmsg.textContent='Uploading '+f.name+'…';
   const r=await fetch(`/project/${pid}/upload`,{method:'POST',body:fd}); fileinput.value='';
   statusmsg.textContent=r.ok?('✓ uploaded '+f.name):'upload failed'; setTimeout(()=>statusmsg.textContent='',2000);
   if(r.ok) loadTree();
 }
-async function newDoc(){const n=prompt('New document name (e.g. chapter.tex):');if(!n)return;const r=await fetch(`/project/${pid}/doc`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n})});if(r.ok){await loadTree();const d=await r.json();openDoc(d._id,'doc')}else alert('Could not create document')}
+async function newDoc(){const n=prompt('New document name (e.g. chapter.tex):');if(!n)return;const r=await fetch(`/project/${pid}/doc`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n,parent_folder_id:curFolder})});if(r.ok){const d=await r.json();await loadTree();openDoc(d._id,'doc')}else alert('Could not create document')}
 async function delDoc(){if(!curId||!confirm('Delete this entity?'))return;const f=document.querySelector(`.file[data-id='${curId}']`);const type=f?f.dataset.type:'doc';await fetch(`/project/${pid}/${type}/${curId}`,{method:'DELETE'});curId=null;doc=null;ed.value='';savebtn.disabled=true;delbtn.disabled=true;cur.textContent='No document open';loadTree()}
 async function compile(){
   if(curId) await save().catch(()=>{});  // flush current buffer so the compile sees it
