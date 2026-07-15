@@ -225,8 +225,28 @@ self-hosted Overleaf.
 | `fleetex exec <service> <cmd...>` | Run a command in a container (e.g. `exec sharelatex bash`) |
 | `fleetex doctor` | Check prerequisites (Docker, Compose v2, git, disk) |
 | `fleetex backup` / `restore` | Back up / restore data (projects, docs, uploads) |
+| `fleetex app <cmd>` | **Control the app** (projects, docs, compile, download, share) — see below |
 | `fleetex config [--port N ...]` | View or change settings and re-render the compose file |
 | `fleetex version` | Show launcher + Docker versions |
+
+## Control the app from the CLI (agent-native)
+
+Fleetex isn't just operable from the browser — the whole application is
+driveable from the command line via `fleetex app`, so scripts and AI agents can
+use it headlessly. Every command supports `--json`.
+
+```bash
+fleetex app register --email you@example.com --password 'secret123'   # or login
+PID=$(fleetex app new "My Paper" --json | jq -r .project_id)
+cat paper.tex | fleetex app push "$PID" main.tex     # set a document's content
+fleetex app compile "$PID" -o paper.pdf              # compile → saves the PDF
+fleetex app download "$PID" -o paper.zip             # sources + compiled PDF
+fleetex app projects                                 # list; also: tree, pull, rm, rename, members
+```
+
+The session is cached in `~/.fleetex/session.json`. See [`SKILL.md`](SKILL.md)
+for the agent-facing capability description. `fleetex app --help` lists
+everything.
 
 ## Configuration
 

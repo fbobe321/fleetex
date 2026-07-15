@@ -245,6 +245,12 @@ def cmd_restore(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_app(args: argparse.Namespace) -> int:
+    from .app import cmd as app_cmd
+
+    return app_cmd(_load(args), args)
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     cfg = _load(args)
     print(f"fleetex doctor  (edition: {cfg.edition})\n")
@@ -365,6 +371,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     dr = sub.add_parser("doctor", help="Check prerequisites (Docker, Compose, git, disk)")
     dr.set_defaults(func=cmd_doctor)
+
+    # ---- app: control the running application over its HTTP API ---------- #
+    jp = argparse.ArgumentParser(add_help=False)
+    jp.add_argument("--json", action="store_true", help="Machine-readable JSON output (for agents)")
+    ap = sub.add_parser("app", help="Control the running app: projects, docs, compile, download, share")
+    ap.set_defaults(func=cmd_app)
+    asub = ap.add_subparsers(dest="app_command", required=True)
+    a_login = asub.add_parser("login", parents=[jp], help="Log in and cache the session")
+    a_login.add_argument("--email"); a_login.add_argument("--password")
+    a_reg = asub.add_parser("register", parents=[jp], help="Create an account (open registration) and log in")
+    a_reg.add_argument("--email"); a_reg.add_argument("--password")
+    asub.add_parser("logout", parents=[jp], help="Clear the cached session")
+    asub.add_parser("whoami", parents=[jp], help="Show the logged-in user")
+    asub.add_parser("projects", parents=[jp], help="List your projects")
+    a_new = asub.add_parser("new", parents=[jp], help="Create a project"); a_new.add_argument("name")
+    a_rm = asub.add_parser("rm", parents=[jp], help="Delete a project"); a_rm.add_argument("project")
+    a_ren = asub.add_parser("rename", parents=[jp], help="Rename a project"); a_ren.add_argument("project"); a_ren.add_argument("name")
+    a_tree = asub.add_parser("tree", parents=[jp], help="List a project's files"); a_tree.add_argument("project")
+    a_pull = asub.add_parser("pull", parents=[jp], help="Print/save a doc's content"); a_pull.add_argument("project"); a_pull.add_argument("path"); a_pull.add_argument("-o", "--output")
+    a_push = asub.add_parser("push", parents=[jp], help="Set a doc's content from a file or stdin"); a_push.add_argument("project"); a_push.add_argument("path"); a_push.add_argument("-f", "--file")
+    a_comp = asub.add_parser("compile", parents=[jp], help="Compile and save the PDF"); a_comp.add_argument("project"); a_comp.add_argument("-o", "--output")
+    a_dl = asub.add_parser("download", parents=[jp], help="Download the project as a zip"); a_dl.add_argument("project"); a_dl.add_argument("-o", "--output")
+    a_mem = asub.add_parser("members", parents=[jp], help="List/add/remove collaborators"); a_mem.add_argument("project"); a_mem.add_argument("--add", metavar="EMAIL"); a_mem.add_argument("--remove", metavar="USER_ID"); a_mem.add_argument("--level", default="readAndWrite", choices=["readAndWrite", "readOnly", "review"])
 
     vs = sub.add_parser("version", help="Show launcher and Docker versions")
     vs.set_defaults(func=cmd_version)
