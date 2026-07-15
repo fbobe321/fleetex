@@ -83,6 +83,56 @@ def test_error_maps_401_to_login_hint(tmp_path: Path, monkeypatch):
         assert "login" in str(exc).lower()
 
 
+def test_mkdoc_mkdir_resolve_folder(tmp_path: Path, monkeypatch):
+    posted = []
+
+    def fake(req, timeout=0):
+        u = req.full_url
+        if u.endswith("/tree"):
+            return _Resp(b'{"entities":[{"id":"f1","path":"/chapters","type":"folder"}]}')
+        if u.endswith("/doc") or u.endswith("/folder"):
+            posted.append(json.loads(req.data.decode()))
+            return _Resp(b'{"_id":"new1","name":"x"}')
+        return _Resp(b"{}")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    c = _client(tmp_path)
+    c.mkdoc("p", "intro.tex", "chapters")
+    c.mkdir("p", "sub", "chapters")
+    assert posted[0]["parent_folder_id"] == "f1" and posted[0]["name"] == "intro.tex"
+    assert posted[1]["parent_folder_id"] == "f1"
+
+
+def test_multipart_encoder():
+    from fleetex.app import _encode_multipart
+
+    body, ctype = _encode_multipart({"name": "logo.png", "folder_id": "f1"}, "qqfile", "logo.png", b"\x89PNGbytes")
+    assert ctype.startswith("multipart/form-data; boundary=----fleetex")
+    assert b'name="name"' in body and b"logo.png" in body
+    assert b'name="qqfile"; filename="logo.png"' in body and b"\x89PNGbytes" in body
+
+
+def test_upload_posts_multipart(tmp_path: Path, monkeypatch):
+    f = tmp_path / "pic.png"
+    f.write_bytes(b"\x89PNGdata")
+    sent = {}
+
+    def fake(req, timeout=0):
+        if req.full_url.endswith("/tree"):
+            return _Resp(b'{"entities":[]}')
+        if req.full_url.endswith("/upload"):
+            sent["ctype"] = req.headers.get("Content-type")
+            sent["len"] = len(req.data)
+            return _Resp(b'{"success":true,"entity_type":"file"}')
+        return _Resp(b"{}")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    c = _client(tmp_path)
+    res = c.upload("p", str(f), "pic.png", None)
+    assert res["success"] is True
+    assert sent["ctype"].startswith("multipart/form-data") and sent["len"] > 0
+
+
 def test_parser_accepts_app_subcommands():
     p = build_parser()
     for argv in (
@@ -92,6 +142,9 @@ def test_parser_accepts_app_subcommands():
         ["app", "new", "Name"],
         ["app", "rm", "pid"],
         ["app", "tree", "pid"],
+        ["app", "mkdoc", "pid", "intro.tex", "--folder", "chapters"],
+        ["app", "mkdir", "pid", "chapters"],
+        ["app", "upload", "pid", "logo.png", "--folder", "chapters", "--name", "l.png"],
         ["app", "pull", "pid", "main.tex", "-o", "out.tex"],
         ["app", "push", "pid", "main.tex", "-f", "in.tex"],
         ["app", "compile", "pid", "-o", "x.pdf"],

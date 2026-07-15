@@ -49,11 +49,14 @@ class Client:
             entry["email"] = email
         _save_session(self.cfg, self._session)
 
-    def request(self, method: str, path: str, body=None, raw: bool = False):
+    def request(self, method: str, path: str, body=None, raw: bool = False, data_bytes=None, content_type=None):
         url = self.base + path
         headers = {"Accept": "application/json"}
         data = None
-        if body is not None:
+        if data_bytes is not None:
+            data = data_bytes
+            headers["Content-Type"] = content_type or "application/octet-stream"
+        elif body is not None:
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
         if self.cookie:
@@ -125,6 +128,32 @@ class Client:
         doc_id = self._doc_id_for_path(pid, path)
         self.request("POST", f"/project/{pid}/doc/{doc_id}", {"content": content})
 
+    def _resolve_folder(self, pid: str, folder: str | None) -> str | None:
+        if not folder:
+            return None  # project root
+        want = "/" + folder.lstrip("/")
+        for e in self.tree(pid):
+            if e["type"] == "folder" and (e["path"] == want or e["id"] == folder):
+                return e["id"]
+        raise AppError(f"no folder {folder!r} in project {pid}")
+
+    def mkdoc(self, pid: str, name: str, folder: str | None) -> dict:
+        fid = self._resolve_folder(pid, folder)
+        return self.request("POST", f"/project/{pid}/doc", {"name": name, "parent_folder_id": fid})
+
+    def mkdir(self, pid: str, name: str, folder: str | None) -> dict:
+        fid = self._resolve_folder(pid, folder)
+        return self.request("POST", f"/project/{pid}/folder", {"name": name, "parent_folder_id": fid})
+
+    def upload(self, pid: str, filepath: str, name: str, folder: str | None) -> dict:
+        fid = self._resolve_folder(pid, folder)
+        content = Path(filepath).read_bytes()
+        fields = {"name": name}
+        if fid:
+            fields["folder_id"] = fid
+        data, ctype = _encode_multipart(fields, "qqfile", name, content)
+        return self.request("POST", f"/project/{pid}/upload", data_bytes=data, content_type=ctype)
+
     def compile(self, pid: str) -> dict:
         return self.request("POST", f"/project/{pid}/compile").get("compile", {})
 
@@ -142,6 +171,27 @@ class Client:
 
     def remove_member(self, pid: str, user_id: str) -> None:
         self.request("DELETE", f"/project/{pid}/members/{user_id}")
+
+
+def _encode_multipart(fields: dict, file_field: str, filename: str, file_bytes: bytes) -> tuple[bytes, str]:
+    """Build a multipart/form-data body with stdlib only (no requests)."""
+    import uuid
+
+    boundary = "----fleetex" + uuid.uuid4().hex
+    b = boundary.encode()
+    parts: list[bytes] = []
+    for k, v in fields.items():
+        parts += [b"--" + b, f'Content-Disposition: form-data; name="{k}"'.encode(), b"", str(v).encode()]
+    parts += [
+        b"--" + b,
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"'.encode(),
+        b"Content-Type: application/octet-stream",
+        b"",
+        file_bytes,
+        b"--" + b + b"--",
+        b"",
+    ]
+    return b"\r\n".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
 def _load_session(cfg: Config) -> dict:
@@ -220,6 +270,18 @@ def cmd(cfg: Config, args) -> int:
             content = Path(args.file).read_text(encoding="utf-8") if args.file else sys.stdin.read()
             c.doc_push(args.project, args.path, content)
             _emit(as_json, f"✅ updated {args.path}", {"ok": True, "path": args.path})
+        elif action == "mkdoc":
+            doc = c.mkdoc(args.project, args.name, args.folder)
+            did = doc.get("_id") or doc.get("id") or ""
+            _emit(as_json, f"✅ created doc {args.name}" + (f" ({did})" if did else ""), doc)
+        elif action == "mkdir":
+            fol = c.mkdir(args.project, args.name, args.folder)
+            fid = fol.get("_id") or fol.get("id") or ""
+            _emit(as_json, f"✅ created folder {args.name}" + (f" ({fid})" if fid else ""), fol)
+        elif action == "upload":
+            name = args.name or Path(args.file).name
+            res = c.upload(args.project, args.file, name, args.folder)
+            _emit(as_json, f"✅ uploaded {name}" + (f" as {res.get('entity_type','')}" if res.get("entity_type") else ""), res)
         elif action == "compile":
             comp = c.compile(args.project)
             pdf = next((f for f in comp.get("outputFiles", []) if f.get("path") == "output.pdf"), None)

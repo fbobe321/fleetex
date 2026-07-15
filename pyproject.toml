@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fleetex"
-version = "0.2.5"
+version = "0.2.6"
 description = "Fleetex: a pip-installable launcher to self-host your own LaTeX editor, powered by Overleaf Community Edition (Docker). Independent project, not affiliated with Overleaf."
 readme = "README.md"
 requires-python = ">=3.9"

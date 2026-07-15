@@ -238,6 +238,9 @@ use it headlessly. Every command supports `--json`.
 ```bash
 fleetex app register --email you@example.com --password 'secret123'   # or login
 PID=$(fleetex app new "My Paper" --json | jq -r .project_id)
+fleetex app mkdir "$PID" chapters                    # create a folder
+fleetex app mkdoc "$PID" intro.tex --folder chapters # create a doc inside it
+fleetex app upload "$PID" figure.png --folder chapters   # upload a file into it
 cat paper.tex | fleetex app push "$PID" main.tex     # set a document's content
 fleetex app compile "$PID" -o paper.pdf              # compile → saves the PDF
 fleetex app download "$PID" -o paper.zip             # sources + compiled PDF

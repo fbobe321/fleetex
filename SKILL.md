@@ -22,6 +22,9 @@ fleetex app register --email you@example.com --password 'secret123'   # or `logi
 | `fleetex app new "<name>"` | create a project → prints its id |
 | `fleetex app rm <id>` / `rename <id> "<name>"` | delete / rename |
 | `fleetex app tree <id>` | list files (`type  /path`) |
+| `fleetex app mkdir <id> "<name>" [--folder PATH]` | create a folder |
+| `fleetex app mkdoc <id> "<name>" [--folder PATH]` | create a document |
+| `fleetex app upload <id> <file> [--folder PATH] [--name N]` | upload a file (into a folder) |
 | `fleetex app pull <id> <path> [-o file]` | print/save a document's text |
 | `fleetex app push <id> <path> [-f file]` | set a document's text (or stdin) |
 | `fleetex app compile <id> [-o out.pdf]` | compile and save the PDF |

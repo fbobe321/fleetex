@@ -163,3 +163,35 @@ A defensible end state is: notifications, chat, filestore, docstore, clsi,
 real-time, and the web backend all in Python, reusing Overleaf's frontend, with
 the OT core either ported-and-fuzz-verified or deliberately kept on Node. At
 that point Fleetex is a genuinely independent, mostly-Python LaTeX platform.
+
+## 8. Delivered — current state (beyond the original scope)
+
+The reimplementation goal is **met and exceeded**. All backend services are in
+Python (notifications, chat, filestore, docstore, clsi, real-time,
+document-updater incl. the fuzz-verified OT core, web) **plus** a new
+`project-history` service. A self-contained browser editor replaces the reused
+frontend: live collaborative editing (convergence-tested), compile-to-PDF with
+an Overleaf-style errors/logs panel, a folder file-tree (create / drag-drop /
+upload-into), version history with live diff + restore, sharing, presence,
+resizable panes, and project download (zip incl. the compiled PDF). One-command
+Docker stack; a headless GUI test harness guards it.
+
+### 8a. Agent-native CLI (product direction beyond the port)
+
+Fleetex is operable three ways: the **browser**, the **`fleetex` stack CLI**
+(up/down/status/logs/backup/restore/doctor + reboot-safe restart policy), and
+**`fleetex app` — full headless control of the application** over its HTTP API
+so scripts and AI agents can use it without a browser (the "CLI-Anything"
+agent-native pattern):
+
+- auth (login/register/logout/whoami), projects (list/new/rm/rename),
+- files (tree, **mkdir**, **mkdoc**, **upload**, pull, push),
+- **compile** (saves the PDF), **download** (project zip), sharing (members).
+
+Every command supports `--json` (agent-readable) with scriptable exit codes; the
+session is cached; capabilities are discoverable via `fleetex app --help` and
+[`SKILL.md`](SKILL.md). Stdlib-only, so the launcher stays dependency-free.
+
+**Requirement:** any future application feature added to the `web` API should
+ship a matching `fleetex app` subcommand (with `--json`) so the app stays fully
+agent-controllable.
