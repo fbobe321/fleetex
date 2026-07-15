@@ -44,6 +44,23 @@ fleetex app compile "$PID" -o paper.pdf --json      # {"status":"success","pdf":
 fleetex app download "$PID" -o paper.zip            # sources + compiled PDF
 ```
 
+## Interactive REPL
+
+For a stateful session (pick a project once, then run many commands), use the
+shell. It reuses one login and a selected project, so `<project>` can be omitted:
+
+```
+$ fleetex app repl
+fleetex[-]> use 6a57...e7b
+fleetex[03e7b]> mkdir chapters
+fleetex[03e7b]> mkdoc intro.tex --folder chapters
+fleetex[03e7b]> compile
+fleetex[03e7b]> exit
+```
+
+It reads from stdin, so you can also pipe a script:
+`printf 'use PID\ncompile\nexit\n' | fleetex app repl`.
+
 ## Discovery
 
 - `fleetex --help` and `fleetex app --help` list every command and flag.

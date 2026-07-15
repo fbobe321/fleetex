@@ -247,6 +247,15 @@ fleetex app download "$PID" -o paper.zip             # sources + compiled PDF
 fleetex app projects                                 # list; also: tree, pull, rm, rename, members
 ```
 
+Or drop into a stateful shell — pick a project once, then run many commands
+(the `<project>` argument becomes optional):
+
+```bash
+fleetex app repl
+# fleetex[-]> use <project_id>
+# fleetex[03e7b]> mkdir chapters ; mkdoc intro.tex --folder chapters ; compile
+```
+
 The session is cached in `~/.fleetex/session.json`. See [`SKILL.md`](SKILL.md)
 for the agent-facing capability description. `fleetex app --help` lists
 everything.

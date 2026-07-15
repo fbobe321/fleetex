@@ -133,9 +133,36 @@ def test_upload_posts_multipart(tmp_path: Path, monkeypatch):
     assert sent["ctype"].startswith("multipart/form-data") and sent["len"] > 0
 
 
+def test_repl_is_stateful(tmp_path: Path, monkeypatch, capsys):
+    from fleetex import app as appmod
+
+    lines = iter(["projects", "use p1", "pwd", "tree", "exit"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(lines))
+    monkeypatch.setattr("sys.stdin", type("S", (), {"isatty": lambda self: False})())
+
+    def fake(req, timeout=0):
+        if req.full_url.endswith("/api/project"):
+            return _Resp(b'{"projects":[{"id":"p1","name":"X","accessLevel":"owner"}]}')
+        if req.full_url.endswith("/project/p1/tree"):
+            return _Resp(b'{"entities":[{"id":"d1","path":"/main.tex","type":"doc"}]}')
+        return _Resp(b"{}")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    cfg = Config.load(tmp_path)
+    cfg.edition = "python"
+    cfg.advertise_host = "localhost"
+    rc = appmod.repl(cfg)
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "p1" in out and "current project: p1" in out
+    # `tree` with no project arg used the selected p1 (hit /project/p1/tree)
+    assert "/main.tex" in out
+
+
 def test_parser_accepts_app_subcommands():
     p = build_parser()
     for argv in (
+        ["app", "repl"],
         ["app", "login"],
         ["app", "register", "--email", "a@b.com"],
         ["app", "projects", "--json"],

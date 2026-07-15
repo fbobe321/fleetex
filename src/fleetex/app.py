@@ -11,8 +11,10 @@ The session cookie from ``fleetex app login`` (or ``register``) is stored in
 
 from __future__ import annotations
 
+import argparse
 import getpass
 import json
+import shlex
 import sys
 import urllib.error
 import urllib.request
@@ -222,11 +224,10 @@ def _emit(as_json: bool, human: str, data) -> None:
 # --------------------------------------------------------------------------- #
 # command handlers (called from cli.py; each returns an exit code)
 # --------------------------------------------------------------------------- #
-def cmd(cfg: Config, args) -> int:
+def _run(c: Client, args) -> int:
     as_json = getattr(args, "json", False)
     action = args.app_command
     try:
-        c = Client(cfg)
         if action == "login":
             email = args.email or input("Email: ")
             password = args.password or getpass.getpass("Password: ")
@@ -317,3 +318,114 @@ def cmd(cfg: Config, args) -> int:
         else:
             print(f"error: {exc}", file=sys.stderr)
         return 1
+
+
+def cmd(cfg: Config, args) -> int:
+    """Entry point for `fleetex app <command>` (one-shot)."""
+    return _run(Client(cfg), args)
+
+
+# --------------------------------------------------------------------------- #
+# shared subcommand definitions (used by the CLI and the REPL)
+# --------------------------------------------------------------------------- #
+def add_app_subcommands(asub, jp, project_optional: bool = False) -> None:
+    """Register the app subcommands on ``asub``. In the REPL ``project`` is
+    optional (falls back to the selected project)."""
+    pj = {"nargs": "?"} if project_optional else {}
+    a_login = asub.add_parser("login", parents=[jp], help="Log in and cache the session")
+    a_login.add_argument("--email"); a_login.add_argument("--password")
+    a_reg = asub.add_parser("register", parents=[jp], help="Create an account (open registration) and log in")
+    a_reg.add_argument("--email"); a_reg.add_argument("--password")
+    asub.add_parser("logout", parents=[jp], help="Clear the cached session")
+    asub.add_parser("whoami", parents=[jp], help="Show the logged-in user")
+    asub.add_parser("projects", parents=[jp], help="List your projects")
+    a_new = asub.add_parser("new", parents=[jp], help="Create a project"); a_new.add_argument("name")
+    a_rm = asub.add_parser("rm", parents=[jp], help="Delete a project"); a_rm.add_argument("project", **pj)
+    a_ren = asub.add_parser("rename", parents=[jp], help="Rename a project"); a_ren.add_argument("project", **pj); a_ren.add_argument("name")
+    a_tree = asub.add_parser("tree", parents=[jp], help="List a project's files"); a_tree.add_argument("project", **pj)
+    a_mkdoc = asub.add_parser("mkdoc", parents=[jp], help="Create a document"); a_mkdoc.add_argument("project", **pj); a_mkdoc.add_argument("name"); a_mkdoc.add_argument("--folder")
+    a_mkdir = asub.add_parser("mkdir", parents=[jp], help="Create a folder"); a_mkdir.add_argument("project", **pj); a_mkdir.add_argument("name"); a_mkdir.add_argument("--folder")
+    a_up = asub.add_parser("upload", parents=[jp], help="Upload a file"); a_up.add_argument("project", **pj); a_up.add_argument("file"); a_up.add_argument("--name"); a_up.add_argument("--folder")
+    a_pull = asub.add_parser("pull", parents=[jp], help="Print/save a doc's content"); a_pull.add_argument("project", **pj); a_pull.add_argument("path"); a_pull.add_argument("-o", "--output")
+    a_push = asub.add_parser("push", parents=[jp], help="Set a doc's content from a file or stdin"); a_push.add_argument("project", **pj); a_push.add_argument("path"); a_push.add_argument("-f", "--file")
+    a_comp = asub.add_parser("compile", parents=[jp], help="Compile and save the PDF"); a_comp.add_argument("project", **pj); a_comp.add_argument("-o", "--output")
+    a_dl = asub.add_parser("download", parents=[jp], help="Download the project as a zip"); a_dl.add_argument("project", **pj); a_dl.add_argument("-o", "--output")
+    a_mem = asub.add_parser("members", parents=[jp], help="List/add/remove collaborators"); a_mem.add_argument("project", **pj); a_mem.add_argument("--add", metavar="EMAIL"); a_mem.add_argument("--remove", metavar="USER_ID"); a_mem.add_argument("--level", default="readAndWrite", choices=["readAndWrite", "readOnly", "review"])
+
+
+_REPL_HELP = """commands (same as `fleetex app`, with the project optional once selected):
+  use <id>        select a current project (then omit <project> in commands)
+  pwd             show the selected project
+  projects | new "<name>" | rm | rename "<name>"
+  tree | mkdir "<name>" [--folder P] | mkdoc "<name>" [--folder P] | upload <file> [--folder P]
+  pull <path> [-o f] | push <path> [-f f] | compile [-o f] | download [-o f]
+  members [--add EMAIL --level L | --remove USER_ID]
+  login | register | logout | whoami | help | exit
+add --json to any command for machine output."""
+
+
+class _ReplParser(argparse.ArgumentParser):
+    def error(self, message):  # don't exit the REPL on a bad command
+        raise ValueError(message)
+
+
+def repl(cfg: Config) -> int:
+    """Interactive, stateful shell: `fleetex app repl`."""
+    client = Client(cfg)
+    jp = argparse.ArgumentParser(add_help=False)
+    jp.add_argument("--json", action="store_true")
+    parser = _ReplParser(prog="", add_help=False)
+    sub = parser.add_subparsers(dest="app_command")
+    add_app_subcommands(sub, jp, project_optional=True)
+
+    current = None
+    interactive = sys.stdin.isatty()
+    if interactive:
+        print("fleetex app REPL — `help` for commands, `use <project_id>` to pick a project, `exit` to quit.")
+        who = f" as {client.email}" if client.email else " (not logged in — run `login`)"
+        print(f"connected to {client.base}{who}")
+
+    while True:
+        prompt = f"fleetex[{current[-6:] if current else '-'}]> " if interactive else ""
+        try:
+            line = input(prompt)
+        except (EOFError, KeyboardInterrupt):
+            if interactive:
+                print()
+            break
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            argv = shlex.split(line)
+        except ValueError as exc:
+            print(f"parse error: {exc}")
+            continue
+        head = argv[0]
+        if head in ("exit", "quit"):
+            break
+        if head == "help":
+            print(_REPL_HELP)
+            continue
+        if head in ("use", "cd"):
+            current = argv[1] if len(argv) > 1 else None
+            print(f"current project: {current or '(none)'}")
+            continue
+        if head == "pwd":
+            print(current or "(no project selected)")
+            continue
+        try:
+            args = parser.parse_args(argv)
+        except ValueError as exc:
+            print(f"error: {exc}  (type `help`)")
+            continue
+        if not getattr(args, "app_command", None):
+            print("unknown command; type `help`")
+            continue
+        if hasattr(args, "project") and getattr(args, "project", None) is None:
+            if not current:
+                print("no project selected — `use <project_id>` first, or pass one")
+                continue
+            args.project = current
+        _run(client, args)
+    return 0
